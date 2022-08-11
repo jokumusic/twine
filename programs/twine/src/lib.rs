@@ -107,8 +107,8 @@ pub struct Product{
     //pub rating: u8, //8; current rating; store this outside of the account
 }
 
-pub struct Purchase{
-    pub purchaser: Pubkey, //32; originally bought by
+pub struct Issuance{
+    pub issued_to: Pubkey, //32; originally issued_to
     pub owner: Pubkey, //32; current owner
     pub amount_paid: u64, //64; coins/tokens paid
     pub max_uses: Option<u64>, //1+64; how many times the purchase can be used
