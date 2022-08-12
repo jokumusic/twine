@@ -3,9 +3,19 @@ use anchor_lang::prelude::*;
 
 declare_id!("BKzDVQpoGW77U3ayBN6ELDbvEvSi2TYpSzHm8KhNmrCx");
 
+
 #[program]
 pub mod twine {
     use super::*;
+
+    pub fn create_company(ctx: Context<CreateCompany>) -> Result<()>{
+        let company = &mut ctx.accounts.company;
+        company.owner = ctx.accounts.owner.key();
+        company.store_count = 0;
+        company.bump = *ctx.bumps.get("company").unwrap();
+
+        Ok(())
+    }
 
     pub fn create_store(ctx: Context<CreateStore>, name: String, description: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
@@ -32,6 +42,28 @@ pub mod twine {
     }
 
 }
+
+
+#[derive(Accounts)]
+pub struct CreateCompany<'info> {
+    #[account(init, payer=payer, space=8+8+32+32, seeds=[b"company", owner.key.as_ref()], bump)]
+    pub company: Account<'info, Company>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// CHECK: the owner is the pubkey that is allowed to modify the copany
+    pub owner: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[account]
+pub struct Company{
+    pub bump: u8, //8;
+    pub owner: Pubkey, //32;
+    pub store_count: u32, //32;
+}
+
 
 #[derive(Accounts)]
 pub struct CreateStore<'info> {

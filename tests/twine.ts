@@ -9,10 +9,28 @@ describe("twine", () => {
   anchor.setProvider(provider);
   const ownerKeypair = Keypair.generate();
   const program = anchor.workspace.Twine as Program<Twine>;
+  const [companyPda, companyPdaBump] = PublicKey
+    .findProgramAddressSync([anchor.utils.bytes.utf8.encode("company"), ownerKeypair.publicKey.toBuffer()], program.programId);
   const [storePda, storePdaBump] = PublicKey
     .findProgramAddressSync([anchor.utils.bytes.utf8.encode("store"), ownerKeypair.publicKey.toBuffer()], program.programId);
   const storeName = "test-store";
   const storeDescription = "test-store description";
+
+  it("Create Company", async () => {
+    const tx = await program.methods
+    .createCompany()
+    .accounts({
+      company: companyPda,
+      payer: provider.publicKey,
+      owner: ownerKeypair.publicKey
+    })
+    .rpc();
+
+     //console.log("Your transaction signature", tx);
+    const createdCompany = await program.account.company.fetch(companyPda);
+    expect(createdCompany.bump).is.equal(companyPdaBump);
+    expect(createdCompany.owner).is.eql(ownerKeypair.publicKey);
+  });
 
 
   it("Create Store", async () => {
