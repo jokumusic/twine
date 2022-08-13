@@ -1,8 +1,11 @@
 use anchor_lang::prelude::*;
 
 
-declare_id!("BKzDVQpoGW77U3ayBN6ELDbvEvSi2TYpSzHm8KhNmrCx");
+declare_id!("ow1FPwr4YunmzcYzCswCnhVqpEiD6H32zVJMSdRsi7Q");
 
+const COMPANY_PREFIX_BYTES : &[u8] ="company".as_bytes();
+const STORE_PREFIX_BYTES : &[u8] ="store".as_bytes();
+//const PRODUCT_PREFIX : &[u8] = "product".as_bytes();
 
 #[program]
 pub mod twine {
@@ -19,25 +22,24 @@ pub mod twine {
 
     pub fn create_store(ctx: Context<CreateStore>, name: String, description: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
-        store.creator = ctx.accounts.payer.key();
+        let company = &mut ctx.accounts.company;
+
         store.owner = ctx.accounts.owner.key();
         store.name = name;
         store.description = description;
         store.bump = *ctx.bumps.get("store").unwrap();
+        store.store_number = company.store_count;
+        store.product_count = 0;
 
+        company.store_count += 1;
         Ok(())
     }
 
-    pub fn update_store(ctx: Context<UpdateStore>, name: String, description: String) -> Result<()> {
+
+    pub fn update_store(ctx: Context<UpdateStore>, _store_number: u32, name: String, description: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
         store.name = name;
         store.description = description;
-        Ok(())
-    }
-
-    pub fn change_store_owner(ctx: Context<UpdateStore>) -> Result<()> {
-        let store = &mut ctx.accounts.store;
-        store.owner = ctx.accounts.owner.key();
         Ok(())
     }
 
@@ -46,95 +48,91 @@ pub mod twine {
 
 #[derive(Accounts)]
 pub struct CreateCompany<'info> {
-    #[account(init, payer=payer, space=8+8+32+32, seeds=[b"company", owner.key.as_ref()], bump)]
+    #[account(init,
+        payer=owner,
+        space=8+COMPANY_STRUCT_SIZE,
+        seeds=[COMPANY_PREFIX_BYTES, owner.key.as_ref()],
+        bump)]
     pub company: Account<'info, Company>,
 
     #[account(mut)]
-    pub payer: Signer<'info>,
-
-    /// CHECK: the owner is the pubkey that is allowed to modify the copany
-    pub owner: UncheckedAccount<'info>,
+    pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
-}
-
-#[account]
-pub struct Company{
-    pub bump: u8, //8;
-    pub owner: Pubkey, //32;
-    pub store_count: u32, //32;
 }
 
 
 #[derive(Accounts)]
 pub struct CreateStore<'info> {
-    #[account(init, payer=payer, space=8+522, seeds=[b"store", owner.key.as_ref()], bump)]
+    #[account(init, 
+        payer=owner, 
+        space=8+STORE_STRUCT_SIZE, 
+        seeds=[STORE_PREFIX_BYTES, owner.key.as_ref(), company.key().as_ref(), &company.store_count.to_be_bytes()],
+        bump)]
     pub store: Account<'info, Store>,
 
+    #[account(mut, has_one=owner, seeds=[COMPANY_PREFIX_BYTES, owner.key.as_ref()], bump=company.bump)]
+    pub company: Account<'info, Company>,
+    
     #[account(mut)]
-    pub payer: Signer<'info>,
-
-    /// CHECK: this is is any account/pubkey that is authorized to modify the account. This is set by the payer on the initial creation
-    pub owner: UncheckedAccount<'info>,
+    pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 
 #[derive(Accounts)]
+#[instruction(_store_number: u32)]
 pub struct UpdateStore<'info> {
-    #[account(mut, has_one=owner, seeds=[b"store", owner.key.as_ref()], bump = store.bump)]   
+    #[account(mut, 
+        has_one=owner,
+        seeds=[STORE_PREFIX_BYTES, owner.key.as_ref(), company.key().as_ref(), &_store_number.to_be_bytes()],
+        bump = store.bump)]   
     pub store: Account<'info, Store>,
 
-    #[account()]
-    pub owner: Signer<'info>,
+    #[account(seeds=[COMPANY_PREFIX_BYTES, owner.key.as_ref()], bump=company.bump)]
+    pub company: Account<'info, Company>,
 
     #[account(mut)]
-    pub payer: Signer<'info>,
+    pub owner: Signer<'info>,   
 }
 
-#[derive(Accounts)]
-pub struct ChangeStoreOwner<'info> {
-    #[account(mut, has_one=owner, seeds=[b"store", owner.key.as_ref()], bump = store.bump)]   
-    pub store: Account<'info, Store>,
 
-    #[account(mut)]
-    pub owner: Signer<'info>,
+
+pub const COMPANY_STRUCT_SIZE: usize = 8 + 32 + 32;
+#[account]
+pub struct Company{
+    pub bump: u8, //8;
+    pub owner: Pubkey, //32;
+    pub store_count: u32, //32; tracks store count. used as part of seed for store PDA's
 }
 
-/*
-#[derive(Accounts)]
-pub struct CreateProduct<'info> {
-    #[account(init, payer=payer, space=8+1, seeds=[b"store", owner.key.as_ref()], bump)]
-    pub store: Account<'info, Store>,
 
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    pub owner: UncheckedAccount<'info>,
-    pub token_program: Program<'info, Token>,
-}
-*/
-
+pub const STORE_STRUCT_SIZE: usize = 8 + 32 + 32 + 250 + 200 + 64;
 #[account]
 pub struct Store{
     pub bump: u8, //8; bump used for this PDA
-    pub creator: Pubkey, //32; original payer
+    pub store_number: u32, //32;
     pub owner: Pubkey, //32; current owner
     pub name: String, //250; store name
     pub description: String, //200; store description
+    pub product_count: u64, //64; tracks product count. used as part of seed for product PDA's
     //pub verified_by: Option<Pubkey>, //1 + 32; If verified, verified by who? store this outside this account
     //pub rating: u8, //8; current rating; store this outside of the account
 }
 
 
+pub const PRODUCT_STRUCT_SIZE: usize = 8 + 64 + 32 + 32 + 32 + 250 + 200 + 64;
 #[account]
 pub struct Product{
-    pub creator: Pubkey, //32; original transaction signer
+    pub bump: u8, //8;
+    pub product_number: u64, //64; keeps track of which product number this is out of the store.product_count
     pub owner: Pubkey, //32; address allowed to make changes
-    pub store: Pubkey, //32; address of store PDA
+    pub store: Pubkey, //32; address of store PDA   
+    pub mint: Pubkey, //32; mint account for this product that will be used to mint tokens
     pub name: String, //250; product name
     pub description: String, //200; product description
-    //pub category: u64, //64; bitwise AND masked identifier 
     pub cost: u64, //64;
+    pub sku: String, //25; This gives the ability to relate the product to a sku in some catalog - not used natively
+    //pub category: u64, //64; bitwise AND masked identifier    
     //pub verified_by: Option<Pubkey>, //1 + 8; store this outside of this account    
     //pub rating: u8, //8; current rating; store this outside of the account
 }
@@ -174,5 +172,16 @@ pub enum ProductType {
 }
 
 
-
-
+#[error_code]
+pub enum ErrorCode {
+    #[msg("PublicKeyMismatch")]
+    PublicKeyMismatch,
+    #[msg("InvalidMintAuthority")]
+    InvalidMintAuthority,
+    #[msg("UninitializedAccount")]
+    UninitializedAccount,
+    #[msg("IncorrectOwner")]
+    IncorrectOwner,
+    #[msg("StoreNumberDoesntMatchCompanyStoreCount")]
+    StoreNumberDoesntMatchCompanyStoreCount,
+}

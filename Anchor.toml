@@ -2,7 +2,7 @@
 seeds = false
 skip-lint = false
 [programs.localnet]
-twine = "BKzDVQpoGW77U3ayBN6ELDbvEvSi2TYpSzHm8KhNmrCx"
+twine = "ow1FPwr4YunmzcYzCswCnhVqpEiD6H32zVJMSdRsi7Q"
 
 [registry]
 url = "https://api.apr.dev"
