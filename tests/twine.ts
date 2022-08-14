@@ -4,6 +4,8 @@ import { Twine } from "../target/types/twine";
 import {PublicKey, Keypair, sendAndConfirmTransaction } from "@solana/web3.js";
 import { assert, expect } from "chai";
 import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
+import { BN } from "bn.js";
+import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, Token, createMint} from "@solana/spl-token";
 
 const ownerKeypair = Keypair.generate();
 const provider = anchor.AnchorProvider.env();
@@ -40,6 +42,7 @@ describe("twine", () => {
                                                 ownerKeypair.publicKey.toBuffer(),
                                                 companyPda.toBuffer(),
                                                 new Uint8Array([0,0,0,1])], program.programId);
+
   const storeName = "test-store";
   const storeDescription = "test-store description";
 
@@ -83,12 +86,11 @@ describe("twine", () => {
     expect(createdStore.owner).is.eql(ownerKeypair.publicKey);    
     expect(createdStore.name).is.equal(storeName);
     expect(createdStore.description).is.eql(storeDescription);
-    //expect(createdStore.productCount).is.eql(new anchor.BN(0));  
+    expect(createdStore.productCount.toNumber()).is.equal(0);  
 
     const storeCompany = await program.account.company.fetch(companyPda);
     expect(storeCompany.storeCount).is.equal(1);
   });
-
 
   it("Update Store", async () => {
     const updatedStoreName = storeName + "-updated";
@@ -154,5 +156,82 @@ describe("twine", () => {
 
     const storeCompany = await program.account.company.fetch(companyPda);
     expect(storeCompany.storeCount).is.equal(2);
+  });
+
+  
+  it("Create Product", async () => {
+    const storeNumber = 0;
+    const productName = "test-product";
+    const productDescription = "test-product-description";
+    const productCost = new BN(100000);
+    const productSku = "skubeedoo"
+
+    const mintKeypair = Keypair.generate();
+    
+    const mint = await createMint(
+      provider.connection,
+      ownerKeypair,
+      ownerKeypair.publicKey,
+      null,
+      1,
+      mintKeypair,
+      null,
+      TOKEN_PROGRAM_ID
+    );
+
+    console.log('created mint: ', (mint as PublicKey).toBase58());
+
+    const [productPda, productPdaBump] = PublicKey.findProgramAddressSync([
+      anchor.utils.bytes.utf8.encode("product"),
+      ownerKeypair.publicKey.toBuffer(),
+      storePda.toBuffer(),
+      new Uint8Array([0,0,0,0,0,0,0,0])], program.programId);
+
+    const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync([
+      anchor.utils.bytes.utf8.encode("product_mint"),
+      (mint as PublicKey).toBuffer()
+    ], program.programId);
+
+    const [mintProductRefPda, mintProductRefPdaBump] = PublicKey.findProgramAddressSync([
+      anchor.utils.bytes.utf8.encode("mint_product_ref"),
+      (mint as PublicKey).toBuffer()
+    ], program.programId);
+
+
+    const tx = await program.methods
+    .createProduct(storeNumber, productName, productDescription, productCost, productSku)
+    .accounts({
+      mint: mint as Token,
+      product: productPda,
+      productMint: productMintPda,
+      mintProductRef: mintProductRefPda,
+      store: storePda,
+      company: companyPda,
+      owner: ownerKeypair.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      program: program.programId,      
+    })
+    .transaction();
+
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
+    console.log('create_product response: ', response);
+
+    const createdProduct = await program.account.product.fetch(productPda);
+    expect(createdProduct.bump).is.equal(productPdaBump);
+    expect(createdProduct.productNumber.toNumber()).is.equal(0); 
+    expect(createdProduct.owner).is.eql(ownerKeypair.publicKey);
+    expect(createdProduct.company).is.eql(companyPda); 
+    expect(createdProduct.store).is.eql(storePda); 
+    expect(createdProduct.name).is.equal(productName);
+    expect(createdProduct.description).is.equal(productDescription)
+    expect(createdProduct.cost.toNumber()).is.equal(productCost.toNumber());
+    expect(createdProduct.sku).is.equal(productSku);
+
+    const createdMintProductRef = await program.account.mintProductRef.fetch(mintProductRefPda);
+    expect(createdMintProductRef.bump).is.equal(mintProductRefPdaBump);
+    expect(createdMintProductRef.product).is.eql(productPda);
+
+    const store = await program.account.store.fetch(storePda);
+    expect(store.productCount.toNumber()).is.equal(1);
   });
 });
