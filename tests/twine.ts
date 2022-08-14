@@ -152,13 +152,13 @@ describe("twine", () => {
     expect(createdStore.owner).is.eql(ownerKeypair.publicKey);
     expect(createdStore.name).is.equal(storeName);
     expect(createdStore.description).is.eql(storeDescription);
-    //expect(createdStore.productCount).is.eql(new anchor.BN(0));  
+    expect(createdStore.productCount.toNumber()).is.equal(0);  
 
     const storeCompany = await program.account.company.fetch(companyPda);
     expect(storeCompany.storeCount).is.equal(2);
   });
 
-  
+
   it("Create Product", async () => {
     const storeNumber = 0;
     const productName = "test-product";
@@ -179,7 +179,7 @@ describe("twine", () => {
       TOKEN_PROGRAM_ID
     );
 
-    console.log('created mint: ', (mint as PublicKey).toBase58());
+    //console.log('created mint: ', (mint as PublicKey).toBase58());
 
     const [productPda, productPdaBump] = PublicKey.findProgramAddressSync([
       anchor.utils.bytes.utf8.encode("product"),
@@ -214,7 +214,7 @@ describe("twine", () => {
     .transaction();
 
     const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
-    console.log('create_product response: ', response);
+    //console.log('create_product response: ', response);
 
     const createdProduct = await program.account.product.fetch(productPda);
     expect(createdProduct.bump).is.equal(productPdaBump);
