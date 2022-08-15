@@ -5,53 +5,104 @@ import {PublicKey, Keypair, sendAndConfirmTransaction } from "@solana/web3.js";
 import { assert, expect } from "chai";
 import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
-import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, Token, createMint} from "@solana/spl-token";
+import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createMint} from "@solana/spl-token";
 
 const ownerKeypair = Keypair.generate();
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
-
 console.log('owner pubkey: ', ownerKeypair.publicKey.toBase58());
 
 
-before((done) => {
-  console.log('funding owner account');
-  provider.connection
-    .requestAirdrop(ownerKeypair.publicKey, 80_000_000)
-    .then(signature=>{
-      provider.connection
-      .confirmTransaction(signature)
-      .then(response=>done())
-      .catch(err=>done(err));
-    })
-    .catch(err=>done(err));  
-});
-
 describe("twine", () => {
   const program = anchor.workspace.Twine as Program<Twine>;
-  const [companyPda, companyPdaBump] = PublicKey
-    .findProgramAddressSync([anchor.utils.bytes.utf8.encode("company"), ownerKeypair.publicKey.toBuffer()], program.programId);
-  const [storePda, storePdaBump] = PublicKey
-    .findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("store"),
-      ownerKeypair.publicKey.toBuffer(),
+  let [metadataPda, metadataPdaBump] = PublicKey
+    .findProgramAddressSync([anchor.utils.bytes.utf8.encode("metadata")], program.programId);
+  let [companyPda, companyPdaBump] = PublicKey
+    .findProgramAddressSync([anchor.utils.bytes.utf8.encode("company"), new Uint8Array([0,0,0,0])], program.programId);
+  let [storePda, storePdaBump] = PublicKey.findProgramAddressSync([
+      anchor.utils.bytes.utf8.encode("store"),                                                
       companyPda.toBuffer(),
       new Uint8Array([0,0,0,0])], program.programId);
-  const [store2Pda, store2PdaBump] = PublicKey.findProgramAddressSync([
-                                                anchor.utils.bytes.utf8.encode("store"),
-                                                ownerKeypair.publicKey.toBuffer(),
-                                                companyPda.toBuffer(),
-                                                new Uint8Array([0,0,0,1])], program.programId);
+  let [store2Pda, store2PdaBump] = PublicKey.findProgramAddressSync([
+      anchor.utils.bytes.utf8.encode("store"),                                                
+      companyPda.toBuffer(),
+      new Uint8Array([0,0,0,1])], program.programId);
 
+  let metadataAccount;
+  let companyNumber = 0;
   const storeName = "test-store";
   const storeDescription = "test-store description";
 
+  before((done) => {
+    console.log('funding owner account');
+    const airdropPromise = provider.connection.requestAirdrop(ownerKeypair.publicKey, 80_000_000);
+    const getAccountInfoPromise = provider.connection.getAccountInfo(metadataPda);
+  
+    Promise
+      .all([airdropPromise, getAccountInfoPromise])
+      .then(async (data)=>{
+        const airdropSignature = data[0];
+        const accountInfo = data[1];
+        //console.log('airdrop signature: ', airdropSignature);
+        const response = await provider.connection.confirmTransaction(airdropSignature);
+        if(accountInfo){
+          metadataAccount = await program.account.metaData.fetch(metadataPda)
+          companyNumber = metadataAccount ? metadataAccount.companyCount : 0;
+          [companyPda, companyPdaBump] = PublicKey.findProgramAddressSync([
+              anchor.utils.bytes.utf8.encode("company"),
+              new Uint8Array([0,0,0,companyNumber])], program.programId); 
+          
+          [storePda, storePdaBump] = PublicKey.findProgramAddressSync([
+              anchor.utils.bytes.utf8.encode("store"),
+              companyPda.toBuffer(),
+              new Uint8Array([0,0,0,0])], program.programId);
 
+          [store2Pda, store2PdaBump] = PublicKey.findProgramAddressSync([
+              anchor.utils.bytes.utf8.encode("store"),                                                
+              companyPda.toBuffer(),
+              new Uint8Array([0,0,0,1])], program.programId);
+        }
+        done();
+      })
+      .catch(err=>done(err));
+  });
+
+
+  it("Initialize Twine", async () =>{
+    if(!metadataAccount) {
+      console.log('initializing metadata: ', metadataPda.toBase58());
+      const tx = await program.methods
+        .initialize()
+        .accounts({
+          metadata: metadataPda,
+          owner: ownerKeypair.publicKey,
+        })
+        .transaction();
+
+        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]); //, sendOptions);
+        //console.log('response: ', response);
+  
+        //console.log("Your transaction signature", tx);
+        const metadata = await program.account.metaData.fetch(metadataPda);
+        expect(metadata.bump).is.equal(metadataPdaBump);
+        expect(metadata.companyCount).is.equal(0);
+        console.log(`metadata.companyCount=${metadata.companyCount}, companyNumber=${companyNumber}`);
+    } 
+    else {
+      console.log('metadata already exists');
+      const metadata = await program.account.metaData.fetch(metadataPda);
+      expect(metadata.bump).is.equal(metadataPdaBump);
+      console.log(`metadata.companyCount=${metadata.companyCount}, companyNumber=${companyNumber}`);
+    }
+  });
+
+  
   it("Create Company", async () => {
     const tx = await program.methods
     .createCompany()
     .accounts({
       company: companyPda,
+      metadata: metadataPda,
       owner: ownerKeypair.publicKey,
     })
     .transaction()
@@ -60,16 +111,21 @@ describe("twine", () => {
     //console.log('response: ', response);
 
      //console.log("Your transaction signature", tx);
+  
     const createdCompany = await program.account.company.fetch(companyPda);
     expect(createdCompany.bump).is.equal(companyPdaBump);
+    expect(createdCompany.companyNumber).is.equal(companyNumber);
     expect(createdCompany.owner).is.eql(ownerKeypair.publicKey);
     expect(createdCompany.storeCount).is.equal(0);
+
+    const metadata = await program.account.metaData.fetch(metadataPda);
+    expect(metadata.companyCount).is.equal(companyNumber + 1);
   });
 
 
   it("Create Store", async () => {
     const tx = await program.methods
-    .createStore(storeName, storeDescription)
+    .createStore(companyNumber, storeName, storeDescription)
     .accounts({
       company: companyPda,
       store: storePda,
@@ -95,27 +151,10 @@ describe("twine", () => {
   it("Update Store", async () => {
     const updatedStoreName = storeName + "-updated";
     const updatedStoreDescription = storeDescription + "-updated";
-    
-    //this should fail because the owner is wrong
-    /*
-    const txfail = await program.methods
-    .updateStore(updatedStoreName, updatedStoreName)
-    .accounts({
-      store: storePda,
-      owner: ownerKeypair.publicKey,
-    })
-    .rpc();
-
-    //console.log("Your transaction signature", txfail);    
-
-    const updatedStoreFail = await program.account.store.fetch(storePda);
-    expect(updatedStoreFail.name).is.equal(storeName);
-    expect(updatedStoreFail.description).is.equal(storeDescription);
-  */
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
-    .updateStore(0, updatedStoreName, updatedStoreDescription)
+    .updateStore(companyNumber, 0, updatedStoreName, updatedStoreDescription)
     .accounts({
       company: companyPda,
       store: storePda,
@@ -135,7 +174,7 @@ describe("twine", () => {
 
   it("Create 2nd Store", async () => {
     const tx = await program.methods
-    .createStore(storeName, storeDescription)
+    .createStore(companyNumber, storeName, storeDescription)
     .accounts({
       company: companyPda,
       store: store2Pda,
@@ -179,11 +218,10 @@ describe("twine", () => {
       TOKEN_PROGRAM_ID
     );
 
-    //console.log('created mint: ', (mint as PublicKey).toBase58());
+    console.log('created mint: ', (mint as PublicKey).toBase58());
 
     const [productPda, productPdaBump] = PublicKey.findProgramAddressSync([
       anchor.utils.bytes.utf8.encode("product"),
-      ownerKeypair.publicKey.toBuffer(),
       storePda.toBuffer(),
       new Uint8Array([0,0,0,0,0,0,0,0])], program.programId);
 
@@ -199,7 +237,7 @@ describe("twine", () => {
 
 
     const tx = await program.methods
-    .createProduct(storeNumber, productName, productDescription, productCost, productSku)
+    .createProduct(companyNumber, storeNumber, productName, productDescription, productCost, productSku)
     .accounts({
       mint: mint as Token,
       product: productPda,
@@ -209,7 +247,7 @@ describe("twine", () => {
       company: companyPda,
       owner: ownerKeypair.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
-      program: program.programId,      
+      twineProgram: program.programId,
     })
     .transaction();
 
