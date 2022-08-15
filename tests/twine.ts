@@ -6,6 +6,7 @@ import { assert, expect } from "chai";
 import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
 import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createMint} from "@solana/spl-token";
+import * as spl_token from "@solana/spl-token";
 
 const ownerKeypair = Keypair.generate();
 const provider = anchor.AnchorProvider.env();
@@ -204,21 +205,10 @@ describe("twine", () => {
     const productDescription = "test-product-description";
     const productCost = new BN(100000);
     const productSku = "skubeedoo"
+    const productMintDecimals = 3;
 
     const mintKeypair = Keypair.generate();
-    
-    const mint = await createMint(
-      provider.connection,
-      ownerKeypair,
-      ownerKeypair.publicKey,
-      null,
-      1,
-      mintKeypair,
-      null,
-      TOKEN_PROGRAM_ID
-    );
-
-    console.log('created mint: ', (mint as PublicKey).toBase58());
+    console.log('mint address: ', mintKeypair.publicKey.toBase58());
 
     const [productPda, productPdaBump] = PublicKey.findProgramAddressSync([
       anchor.utils.bytes.utf8.encode("product"),
@@ -227,19 +217,19 @@ describe("twine", () => {
 
     const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync([
       anchor.utils.bytes.utf8.encode("product_mint"),
-      (mint as PublicKey).toBuffer()
+      mintKeypair.publicKey.toBuffer()
     ], program.programId);
 
     const [mintProductRefPda, mintProductRefPdaBump] = PublicKey.findProgramAddressSync([
       anchor.utils.bytes.utf8.encode("mint_product_ref"),
-      (mint as PublicKey).toBuffer()
+      mintKeypair.publicKey.toBuffer()
     ], program.programId);
 
 
     const tx = await program.methods
-    .createProduct(companyNumber, storeNumber, productName, productDescription, productCost, productSku)
+    .createProduct(companyNumber, storeNumber, productMintDecimals, productName, productDescription, productCost, productSku)
     .accounts({
-      mint: mint as Token,
+      mint: mintKeypair.publicKey,
       product: productPda,
       productMint: productMintPda,
       mintProductRef: mintProductRefPda,
@@ -251,7 +241,7 @@ describe("twine", () => {
     })
     .transaction();
 
-    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair, mintKeypair]);
     //console.log('create_product response: ', response);
 
     const createdProduct = await program.account.product.fetch(productPda);
@@ -271,5 +261,13 @@ describe("twine", () => {
 
     const store = await program.account.store.fetch(storePda);
     expect(store.productCount.toNumber()).is.equal(1);
+
+    const mintAccount = await spl_token.getMint(provider.connection, mintKeypair.publicKey,'confirmed', TOKEN_PROGRAM_ID);
+    expect(mintAccount.address).is.eql(mintKeypair.publicKey)
+    expect(mintAccount.decimals).is.equal(productMintDecimals);
+    expect(mintAccount.supply).is.equal(BigInt(0));
+    expect(mintAccount.freezeAuthority).is.eql(ownerKeypair.publicKey);
+    expect(mintAccount.mintAuthority).is.eql(ownerKeypair.publicKey);
+    expect(mintAccount.isInitialized).is.equal(true);    
   });
 });

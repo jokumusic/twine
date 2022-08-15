@@ -65,7 +65,7 @@ pub mod twine {
     }
 
 
-    pub fn create_product(ctx: Context<CreateProduct>, _company_number: u32, _store_number: u32,
+    pub fn create_product(ctx: Context<CreateProduct>, _company_number: u32, _store_number: u32,  _decimals: u8,
                 name: String, description: String, cost: u64, sku: String) -> Result<()> {
         
         let owner = &ctx.accounts.owner;
@@ -165,9 +165,17 @@ pub struct UpdateStore<'info> {
 
 //consider using metaxplex for this.
 #[derive(Accounts)]
-#[instruction(_company_number: u32, _store_number: u32)]
+#[instruction(_company_number: u32, _store_number: u32,  _decimals: u8)]
 pub struct CreateProduct<'info> {
-    pub mint: Account<'info, Mint>, //mint account for this product. THe owner mints tokens to the product_mint account for this program to use
+
+    #[account(
+        init,
+        payer=owner,
+        mint::decimals=_decimals,
+        mint::authority=owner,
+        mint::freeze_authority = owner,
+    )]
+    pub mint: Account<'info, Mint>, //mint account for this product. The owner mints tokens to the product_mint account for this program to use
     
     #[account(init,
         payer=owner,
