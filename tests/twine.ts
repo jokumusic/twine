@@ -248,8 +248,7 @@ describe("twine", () => {
     //because they have to use a separate wallet program for signing
     tx.feePayer = ownerKeypair.publicKey;
     tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-    tx.partialSign(mintKeypair)
-    
+    tx.partialSign(mintKeypair)    
     tx.partialSign(ownerKeypair); //this is where the wallet would be called to sign the transaction
     
     const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 

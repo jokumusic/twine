@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Mint};
 
-declare_id!("F9bACdqb7Je61weDJudZjsRJecvGtDaMKum2dypyzyjb");
+declare_id!("5MLDaZmz9UUe49AeTxQM9dsRXnWSmVKfhE5aLuAEj61n");
 
 const METADATA_SEED_BYTES: &[u8] = "metadata".as_bytes();
 const COMPANY_SEED_BYTES : &[u8] ="company".as_bytes();
