@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Mint};
 
-declare_id!("HsxDAhDzJH5nHtnTz1rk5jzHzygrzduA6wYaYZdmTQ7Z");
+declare_id!("F9bACdqb7Je61weDJudZjsRJecvGtDaMKum2dypyzyjb");
 
 const METADATA_SEED_BYTES: &[u8] = "metadata".as_bytes();
 const COMPANY_SEED_BYTES : &[u8] ="company".as_bytes();
@@ -67,7 +67,6 @@ pub mod twine {
 
     pub fn create_product(ctx: Context<CreateProduct>, _company_number: u32, _store_number: u32,  _decimals: u8,
                 name: String, description: String, cost: u64, sku: String) -> Result<()> {
-        
         let owner = &ctx.accounts.owner;
         let company = &ctx.accounts.company;
         let store = &mut ctx.accounts.store;
@@ -88,7 +87,6 @@ pub mod twine {
         mint_product_ref.product = product.key();
 
         store.product_count += 1; 
-
         Ok(())
     }
 
@@ -176,7 +174,7 @@ pub struct CreateProduct<'info> {
         mint::freeze_authority = owner,
     )]
     pub mint: Account<'info, Mint>, //mint account for this product. The owner mints tokens to the product_mint account for this program to use
-    
+  
     #[account(init,
         payer=owner,
         space=8+PRODUCT_SIZE, 
@@ -206,14 +204,16 @@ pub struct CreateProduct<'info> {
     pub mint_product_ref: Account<'info, MintProductRef>,
 
 
-    #[account(mut,
-        has_one=owner, 
+    #[account(mut @ ErrorCode::NotMutable,
+        has_one=owner @ ErrorCode::IncorrectOwner, 
         seeds=[STORE_SEED_BYTES, company.key().as_ref(), &_store_number.to_be_bytes()],
         bump=store.bump)]
     pub store: Account<'info, Store>,
 
 
-    #[account(seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()], bump=company.bump)]
+    #[account(has_one=owner @ ErrorCode::IncorrectOwner,
+        seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()],
+        bump=company.bump)]
     pub company: Account<'info, Company>,
   
     #[account(mut)]
@@ -318,4 +318,6 @@ pub enum ErrorCode {
     IncorrectOwner,
     #[msg("StoreNumberDoesntMatchCompanyStoreCount")]
     StoreNumberDoesntMatchCompanyStoreCount,
+    #[msg("NotMutable")]
+    NotMutable,
 }

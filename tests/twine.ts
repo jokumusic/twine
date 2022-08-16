@@ -8,6 +8,8 @@ import { BN } from "bn.js";
 import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createMint} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
 
+///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
+///Most of the time the user program has to send transactions to a separate wallet program...
 const ownerKeypair = Keypair.generate();
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
@@ -240,8 +242,24 @@ describe("twine", () => {
       twineProgram: program.programId,
     })
     .transaction();
+    tx.signature
 
-    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair, mintKeypair]);
+    //setting feepayer,recentblockhash and then partialsigning is being done here, because that's the way it has to be done by mobile/web app client
+    //because they have to use a separate wallet program for signing
+    tx.feePayer = ownerKeypair.publicKey;
+    tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+    tx.partialSign(mintKeypair)
+    
+    tx.partialSign(ownerKeypair); //this is where the wallet would be called to sign the transaction
+    
+    const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
+      tx.serialize({
+          requireAllSignatures: true,
+          verifySignatures: true,
+      }), {skipPreflight: true});
+
+    console.log('txid: ', txid);
+    //const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
     //console.log('create_product response: ', response);
 
     const createdProduct = await program.account.product.fetch(productPda);
