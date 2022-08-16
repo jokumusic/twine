@@ -18,23 +18,46 @@ console.log('owner pubkey: ', ownerKeypair.publicKey.toBase58());
 
 describe("twine", () => {
   const program = anchor.workspace.Twine as Program<Twine>;
-  let [metadataPda, metadataPdaBump] = PublicKey
-    .findProgramAddressSync([anchor.utils.bytes.utf8.encode("metadata")], program.programId);
-  let [companyPda, companyPdaBump] = PublicKey
-    .findProgramAddressSync([anchor.utils.bytes.utf8.encode("company"), new Uint8Array([0,0,0,0])], program.programId);
-  let [storePda, storePdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("store"),                                                
-      companyPda.toBuffer(),
-      new Uint8Array([0,0,0,0])], program.programId);
-  let [store2Pda, store2PdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("store"),                                                
-      companyPda.toBuffer(),
-      new Uint8Array([0,0,0,1])], program.programId);
-
   let metadataAccount;
-  let companyNumber = 0;
+  let companyNumber = 0; //changes based on metadata
+
+  const storeNumber = 0;
   const storeName = "test-store";
   const storeDescription = "test-store description";
+  
+  const productNumber = 0;
+  const productName = "test-product";
+  const productDescription = "test-product-description";
+  const productCost = new BN(100000);
+  const productSku = "skubeedoo"
+
+
+  let [metadataPda, metadataPdaBump] = PublicKey.findProgramAddressSync([anchor.utils.bytes.utf8.encode("metadata")], program.programId);
+  let [companyPda, companyPdaBump] = PublicKey.findProgramAddressSync(
+    [
+       anchor.utils.bytes.utf8.encode("company"),
+      new Uint8Array([0,0,0,companyNumber])
+    ], program.programId);
+  let [storePda, storePdaBump] = PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode("store"),                                                
+      companyPda.toBuffer(),
+      new Uint8Array([0,0,0,storeNumber])
+    ], program.programId);
+  let [store2Pda, store2PdaBump] = PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode("store"),                                                
+      companyPda.toBuffer(),
+      new Uint8Array([0,0,0,1])
+    ], program.programId);
+  let [productPda, productPdaBump] = PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode("product"),
+      storePda.toBuffer(),
+      new Uint8Array([0,0,0,0,0,0,0,productNumber])
+    ], program.programId);
+
+
 
   before((done) => {
     console.log('funding owner account');
@@ -51,6 +74,7 @@ describe("twine", () => {
         if(accountInfo){
           metadataAccount = await program.account.metaData.fetch(metadataPda)
           companyNumber = metadataAccount ? metadataAccount.companyCount : 0;
+          console.log('company number is ', companyNumber);
           [companyPda, companyPdaBump] = PublicKey.findProgramAddressSync([
               anchor.utils.bytes.utf8.encode("company"),
               new Uint8Array([0,0,0,companyNumber])], program.programId); 
@@ -58,12 +82,17 @@ describe("twine", () => {
           [storePda, storePdaBump] = PublicKey.findProgramAddressSync([
               anchor.utils.bytes.utf8.encode("store"),
               companyPda.toBuffer(),
-              new Uint8Array([0,0,0,0])], program.programId);
+              new Uint8Array([0,0,0,storeNumber])], program.programId);
 
           [store2Pda, store2PdaBump] = PublicKey.findProgramAddressSync([
               anchor.utils.bytes.utf8.encode("store"),                                                
               companyPda.toBuffer(),
               new Uint8Array([0,0,0,1])], program.programId);
+
+          [productPda, productPdaBump] = PublicKey.findProgramAddressSync([
+                anchor.utils.bytes.utf8.encode("product"),
+                storePda.toBuffer(),
+                new Uint8Array([0,0,0,0,0,0,0,productNumber])], program.programId);
         }
         done();
       })
@@ -141,8 +170,8 @@ describe("twine", () => {
 
     const createdStore = await program.account.store.fetch(storePda);
     expect(createdStore.bump).is.equal(storePdaBump);
-    expect(createdStore.storeNumber).is.equal(0);
-    expect(createdStore.owner).is.eql(ownerKeypair.publicKey);    
+    expect(createdStore.storeNumber).is.equal(storeNumber);
+    expect(createdStore.owner).is.eql(ownerKeypair.publicKey);
     expect(createdStore.name).is.equal(storeName);
     expect(createdStore.description).is.eql(storeDescription);
     expect(createdStore.productCount.toNumber()).is.equal(0);  
@@ -151,13 +180,14 @@ describe("twine", () => {
     expect(storeCompany.storeCount).is.equal(1);
   });
 
+
   it("Update Store", async () => {
     const updatedStoreName = storeName + "-updated";
     const updatedStoreDescription = storeDescription + "-updated";
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
-    .updateStore(companyNumber, 0, updatedStoreName, updatedStoreDescription)
+    .updateStore(companyNumber, storeNumber, updatedStoreName, updatedStoreDescription)
     .accounts({
       company: companyPda,
       store: storePda,
@@ -170,7 +200,7 @@ describe("twine", () => {
     const updatedStoreSuccess = await program.account.store.fetch(storePda);
     expect(updatedStoreSuccess.name).is.equal(updatedStoreName);
     expect(updatedStoreSuccess.description).is.equal(updatedStoreDescription);
-    expect(updatedStoreSuccess.storeNumber).is.equal(0);
+    expect(updatedStoreSuccess.storeNumber).is.equal(storeNumber);
     expect(updatedStoreSuccess.owner).is.eql(ownerKeypair.publicKey);
   });
 
@@ -190,32 +220,21 @@ describe("twine", () => {
 
     const createdStore = await program.account.store.fetch(store2Pda);
     expect(createdStore.bump).is.equal(store2PdaBump);
-    expect(createdStore.storeNumber).is.equal(1);
+    expect(createdStore.storeNumber).is.equal(storeNumber + 1);
     expect(createdStore.owner).is.eql(ownerKeypair.publicKey);
     expect(createdStore.name).is.equal(storeName);
     expect(createdStore.description).is.eql(storeDescription);
-    expect(createdStore.productCount.toNumber()).is.equal(0);  
+    expect(createdStore.productCount.toNumber()).is.equal(0);
 
     const storeCompany = await program.account.company.fetch(companyPda);
     expect(storeCompany.storeCount).is.equal(2);
   });
 
 
-  it("Create Product", async () => {
-    const storeNumber = 0;
-    const productName = "test-product";
-    const productDescription = "test-product-description";
-    const productCost = new BN(100000);
-    const productSku = "skubeedoo"
+  it("Create Product", async () => {    
     const productMintDecimals = 3;
-
     const mintKeypair = Keypair.generate();
     console.log('mint address: ', mintKeypair.publicKey.toBase58());
-
-    const [productPda, productPdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("product"),
-      storePda.toBuffer(),
-      new Uint8Array([0,0,0,0,0,0,0,0])], program.programId);
 
     const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync([
       anchor.utils.bytes.utf8.encode("product_mint"),
@@ -263,7 +282,7 @@ describe("twine", () => {
 
     const createdProduct = await program.account.product.fetch(productPda);
     expect(createdProduct.bump).is.equal(productPdaBump);
-    expect(createdProduct.productNumber.toNumber()).is.equal(0); 
+    expect(createdProduct.productNumber.toNumber()).is.equal(productNumber); 
     expect(createdProduct.owner).is.eql(ownerKeypair.publicKey);
     expect(createdProduct.company).is.eql(companyPda); 
     expect(createdProduct.store).is.eql(storePda); 
@@ -286,5 +305,36 @@ describe("twine", () => {
     expect(mintAccount.freezeAuthority).is.eql(ownerKeypair.publicKey);
     expect(mintAccount.mintAuthority).is.eql(ownerKeypair.publicKey);
     expect(mintAccount.isInitialized).is.equal(true);    
+  });
+
+
+  it("Update Product", async () => {
+    const updatedProductName = productName + "-updated";
+    const updatedProductDescription = productDescription + "-updated";
+    const updatedProductSku = productSku + "-updated";
+    const updatedProductCost = 200000;
+
+    //this should succeed because the owner is correct
+    const txSuccess = await program.methods
+    .updateProduct(companyNumber, storeNumber, new BN(productNumber), 
+      updatedProductName, updatedProductDescription, new BN(updatedProductCost), updatedProductSku
+    )
+    .accounts({
+      company: companyPda,
+      store: storePda,
+      product: productPda,
+      owner: ownerKeypair.publicKey,      
+    })
+    .transaction();
+
+    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [ownerKeypair]);
+
+    const updatedProduct = await program.account.product.fetch(productPda);
+    expect(updatedProduct.name).is.equal(updatedProductName);
+    expect(updatedProduct.description).is.equal(updatedProductDescription);
+    expect(updatedProduct.productNumber.toNumber()).is.equal(productNumber);
+    expect(updatedProduct.cost.toNumber()).is.equal(updatedProductCost);
+    expect(updatedProduct.sku).is.equal(updatedProductSku);
+    expect(updatedProduct.owner).is.eql(ownerKeypair.publicKey);
   });
 });

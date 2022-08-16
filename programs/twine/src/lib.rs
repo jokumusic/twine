@@ -90,6 +90,18 @@ pub mod twine {
         Ok(())
     }
 
+    pub fn update_product(ctx: Context<UpdateProduct>, _company_number: u32, _store_number: u32, _product_number: u64,
+        name: String, description: String, cost: u64, sku: String) -> Result<()> {
+
+        let product = &mut ctx.accounts.product;
+        product.name = name;
+        product.description = description;
+        product.cost = cost;
+        product.sku = sku;
+
+        Ok(())
+    }
+
 }
 
 
@@ -182,7 +194,8 @@ pub struct CreateProduct<'info> {
             PRODUCT_SEED_BYTES,
             store.key().as_ref(),
             &store.product_count.to_be_bytes()
-        ], bump)]
+        ], 
+        bump)]
     pub product: Account<'info, Product>,
 
     #[account(init,
@@ -223,6 +236,37 @@ pub struct CreateProduct<'info> {
     pub rent: Sysvar<'info, Rent>,
     pub twine_program: Program<'info, crate::program::Twine>,
 }
+
+#[derive(Accounts)]
+#[instruction(_company_number: u32, _store_number: u32, _product_number: u64)]
+pub struct UpdateProduct<'info> {
+    #[account(mut @ ErrorCode::NotMutable,
+        has_one=owner @ ErrorCode::IncorrectOwner,
+        seeds=[
+            PRODUCT_SEED_BYTES,
+            store.key().as_ref(),
+            &_product_number.to_be_bytes()
+        ], 
+        bump = product.bump
+    )]
+    pub product: Account<'info, Product>,
+
+    #[account(has_one=owner @ ErrorCode::IncorrectOwner, 
+        seeds=[STORE_SEED_BYTES, company.key().as_ref(), &_store_number.to_be_bytes()],
+        bump=store.bump)]
+    pub store: Account<'info, Store>,
+
+    #[account(has_one=owner @ ErrorCode::IncorrectOwner,
+        seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()],
+        bump=company.bump)]
+    pub company: Account<'info, Company>,
+
+    #[account(mut)]
+    pub owner: Signer<'info>
+}
+
+
+
 
 pub const METADATA_SIZE: usize = 1 + 4;
 #[account]
