@@ -285,32 +285,33 @@ pub struct Company{
 }
 
 
-pub const STORE_SIZE: usize = 1 + 32 + 4 + 32 + 250 + 200 + 8;
+pub const STORE_SIZE: usize = 1 + 32 + 32 + 4 + 8 + 254 + 204;
 #[account]
 pub struct Store{
     pub bump: u8, //1; bump used for this PDA
     pub company: Pubkey, //32;
-    pub store_number: u32, //4;
     pub owner: Pubkey, //32; current owner
-    pub name: String, //250; store name
-    pub description: String, //200; store description
+    pub store_number: u32, //4;
     pub product_count: u64, //8; tracks product count. used as part of seed for product PDA's
+    pub name: String, //4+250; store name
+    pub description: String, //4+200; store description
+   
     //pub verified_by: Option<Pubkey>, //1 + 32; If verified, verified by who? store this outside this account
     //pub rating: u8, //8; current rating; store this outside of the account
 }
 
 
-pub const PRODUCT_SIZE: usize = 1 + 8 + 32 + 32 + 32 + 250 + 200 + 8 + 25;
+pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + 32 + 8 + 8 + 250 + 200 + 25;
 #[account]
 pub struct Product{
     pub bump: u8, //1;
-    pub product_number: u64, //8; keeps track of which product number this is out of the store.product_count
     pub owner: Pubkey, //32; address allowed to make changes
-    pub company: Pubkey, //32; address of company PDA
     pub store: Pubkey, //32; address of store PDA  
+    pub company: Pubkey, //32; address of company PDA
+    pub cost: u64, //8;
+    pub product_number: u64, //8; keeps track of which product number this is out of the store.product_count
     pub name: String, //250; product name
     pub description: String, //200; product description
-    pub cost: u64, //8;
     pub sku: String, //25; This gives the ability to relate the product to a sku in some catalog - not used natively
     //pub category: u64, //64; bitwise AND masked identifier    
     //pub verified_by: Option<Pubkey>, //1 + 8; store this outside of this account    
