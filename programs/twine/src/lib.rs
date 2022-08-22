@@ -8,10 +8,6 @@ const PRODUCT_SEED_BYTES : &[u8] = "product".as_bytes();
 const PRODUCT_MINT_SEED_BYTES : &[u8] = "product_mint".as_bytes();
 const MINT_PRODUCT_REF_SEED_BYTES : &[u8] = "mint_product_ref".as_bytes();
 
-///
-/// Using the total count of company, store or product as part of the seed for any account is dangerous
-/// because once those numbers are reached, the program will stop working and new accounts can't be created
-/// find another solution.
 #[program]
 pub mod twine {
     use super::*;
@@ -39,6 +35,27 @@ pub mod twine {
     }
 
 
+    pub fn create_product(ctx: Context<CreateProduct>, _product_id: String, _decimals: u8,
+        name: String, description: String, cost: u64, sku: String) -> Result<()> {
+        let owner = &ctx.accounts.owner;
+        let product = &mut ctx.accounts.product;    
+        let mint_product_ref = &mut ctx.accounts.mint_product_ref;
+
+        product.bump = *ctx.bumps.get("product").unwrap();
+        product.product_id = _product_id;
+        product.owner = owner.key();
+        product.store = None;
+        product.name = name;
+        product.description = description;
+        product.cost = cost;
+        product.sku = sku;
+
+        mint_product_ref.bump = *ctx.bumps.get("mint_product_ref").unwrap();
+        mint_product_ref.product = product.key();
+
+        Ok(())
+    }
+
     pub fn create_store_product(ctx: Context<CreateStoreProduct>, _product_id: String, _decimals: u8,
                 name: String, description: String, cost: u64, sku: String) -> Result<()> {
         let owner = &ctx.accounts.owner;
@@ -63,7 +80,7 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn update_store_product(ctx: Context<UpdateStoreProduct>, name: String, description: String, cost: u64, sku: String) -> Result<()> {
+    pub fn update_product(ctx: Context<UpdateProduct>, name: String, description: String, cost: u64, sku: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
         product.name = name;
         product.description = description;
@@ -104,7 +121,7 @@ pub struct UpdateStore<'info> {
     pub owner: Signer<'info>,
 }
 
-//consider using metaxplex for this.
+//consider using metaplex for this.
 #[derive(Accounts)]
 #[instruction(_product_id: String, _decimals: u8)]
 pub struct CreateStoreProduct<'info> {
@@ -158,18 +175,59 @@ pub struct CreateStoreProduct<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UpdateStoreProduct<'info> {
+#[instruction(_product_id: String, _decimals: u8)]
+pub struct CreateProduct<'info> {
+
+    #[account(
+        init,
+        payer=owner,
+        mint::decimals=_decimals,
+        mint::authority=owner,
+        mint::freeze_authority = owner,
+    )]
+    pub mint: Account<'info, Mint>, //mint account for this product. The owner mints tokens to the product_mint account for this program to use
+  
+    #[account(init,
+        payer=owner,
+        space=8+PRODUCT_SIZE, 
+        seeds=[PRODUCT_SEED_BYTES, _product_id.as_bytes()], 
+        bump)]
+    pub product: Account<'info, Product>,
+
+    #[account(init,
+        payer=owner,
+        seeds=[PRODUCT_MINT_SEED_BYTES, mint.key().as_ref()],
+        bump,
+        token::mint = mint,
+        token::authority = twine_program, //this program will be transferring tokens out of this account
+    )]
+    pub product_mint: Account<'info, TokenAccount>,
+  
+    //for an issued token, this account can be derived, 
+    //then the contained product pubkey gives the product account address.
+      #[account(init,
+        payer=owner,
+        space=8+MINT_PRODUCT_REF_SIZE,
+        seeds=[MINT_PRODUCT_REF_SEED_BYTES, mint.key().as_ref()], 
+        bump)]
+    pub mint_product_ref: Account<'info, MintProductRef>,
+  
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>,
+    pub twine_program: Program<'info, crate::program::Twine>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateProduct<'info> {
     #[account(mut @ ErrorCode::NotMutable,
         has_one=owner @ ErrorCode::IncorrectOwner,
         seeds=[PRODUCT_SEED_BYTES, product.product_id.as_bytes()], 
         bump = product.bump
     )]
     pub product: Account<'info, Product>,
-
-    #[account(has_one=owner @ ErrorCode::IncorrectOwner, 
-        seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
-        bump=store.bump)]
-    pub store: Account<'info, Store>,
 
     #[account(mut)]
     pub owner: Signer<'info>
