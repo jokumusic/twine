@@ -261,8 +261,7 @@ describe("twine", () => {
       twineProgram: program.programId,
     })
     .transaction();
-    tx.signature
-
+   
     //setting feepayer,recentblockhash and then partialsigning is being done here, because that's the way it has to be done by mobile/web app client
     //because they have to use a separate wallet program for signing
     tx.feePayer = ownerKeypair.publicKey;
