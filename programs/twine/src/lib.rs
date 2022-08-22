@@ -1,10 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Mint};
 
-declare_id!("81U6fENzYDztW9NkpXomSXmGtAAF2bVqh5Z4CNbU7wJ5");
+declare_id!("ECUN8sf6PiSxXD5E3rBd9ZSWonoxb6G9HJHuPQB4vfBg");
 
-const METADATA_SEED_BYTES: &[u8] = "metadata".as_bytes();
-const COMPANY_SEED_BYTES : &[u8] ="company".as_bytes();
 const STORE_SEED_BYTES : &[u8] ="store".as_bytes();
 const PRODUCT_SEED_BYTES : &[u8] = "product".as_bytes();
 const PRODUCT_MINT_SEED_BYTES : &[u8] = "product_mint".as_bytes();
@@ -17,67 +15,41 @@ const MINT_PRODUCT_REF_SEED_BYTES : &[u8] = "mint_product_ref".as_bytes();
 #[program]
 pub mod twine {
     use super::*;
-
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let metadata = &mut ctx.accounts.metadata;
-        metadata.bump = *ctx.bumps.get("metadata").unwrap();
-        metadata.company_count = 0;
-        Ok(())
-    }
-
-    pub fn create_company(ctx: Context<CreateCompany>) -> Result<()>{
-        let company = &mut ctx.accounts.company;
-        let metadata = &mut ctx.accounts.metadata;
-
-        company.bump = *ctx.bumps.get("company").unwrap();
-        company.company_number = metadata.company_count;
-        company.owner = ctx.accounts.owner.key();
-        company.store_count = 0;
-
-        metadata.company_count += 1;
-
-        Ok(())
-    }
-
-
-    pub fn create_store(ctx: Context<CreateStore>, _company_number: u32, name: String, description: String) -> Result<()> {
+    
+    pub fn create_store(ctx: Context<CreateStore>, _store_id: String, name: String, description: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
-        let company = &mut ctx.accounts.company;
 
         store.bump = *ctx.bumps.get("store").unwrap();
-        store.company = company.key();
-        store.store_number = company.store_count;
+        store.store_id =_store_id;
         store.owner = ctx.accounts.owner.key();
         store.name = name;
         store.description = description;        
         store.product_count = 0;
 
-        company.store_count += 1;
         Ok(())
     }
 
 
-    pub fn update_store(ctx: Context<UpdateStore>, _company_number: u32, _store_number: u32, name: String, description: String) -> Result<()> {
+    pub fn update_store(ctx: Context<UpdateStore>, name: String, description: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
         store.name = name;
         store.description = description;
+
         Ok(())
     }
 
 
-    pub fn create_product(ctx: Context<CreateProduct>, _company_number: u32, _store_number: u32,  _decimals: u8,
+    pub fn create_store_product(ctx: Context<CreateStoreProduct>, _product_id: String, _decimals: u8,
                 name: String, description: String, cost: u64, sku: String) -> Result<()> {
         let owner = &ctx.accounts.owner;
-        let company = &ctx.accounts.company;
         let store = &mut ctx.accounts.store;
         let product = &mut ctx.accounts.product;    
         let mint_product_ref = &mut ctx.accounts.mint_product_ref;
 
         product.bump = *ctx.bumps.get("product").unwrap();
-        product.product_number = store.product_count;
+        product.product_id = _product_id;
         product.owner = owner.key();
-        product.company = company.key();
-        product.store = store.key();
+        product.store = Some(store.key());
         product.name = name;
         product.description = description;
         product.cost = cost;
@@ -87,12 +59,11 @@ pub mod twine {
         mint_product_ref.product = product.key();
 
         store.product_count += 1; 
+
         Ok(())
     }
 
-    pub fn update_product(ctx: Context<UpdateProduct>, _company_number: u32, _store_number: u32, _product_number: u64,
-        name: String, description: String, cost: u64, sku: String) -> Result<()> {
-
+    pub fn update_store_product(ctx: Context<UpdateStoreProduct>, name: String, description: String, cost: u64, sku: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
         product.name = name;
         product.description = description;
@@ -106,51 +77,15 @@ pub mod twine {
 
 
 #[derive(Accounts)]
-pub struct Initialize<'info> {
-    #[account(init,
-        payer = owner,
-        space = 8+METADATA_SIZE,
-        seeds = [METADATA_SEED_BYTES],
-        bump)]
-    pub metadata: Account<'info, MetaData>,
-
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct CreateCompany<'info> {
-    #[account(init,
-        payer=owner,
-        space=8+COMPANY_SIZE,
-        seeds=[COMPANY_SEED_BYTES, &metadata.company_count.to_be_bytes()],
-        bump)]
-    pub company: Account<'info, Company>,
-
-    #[account(mut, seeds = [METADATA_SEED_BYTES], bump=metadata.bump)]
-    pub metadata: Account<'info, MetaData>,
-
-    #[account(mut)]
-    pub owner: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-
-#[derive(Accounts)]
-#[instruction(_company_number: u32)]
+#[instruction(_store_id: String)]
 pub struct CreateStore<'info> {
     #[account(init,
         payer=owner,
         space=8+STORE_SIZE, 
-        seeds=[STORE_SEED_BYTES, company.key().as_ref(), &company.store_count.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, _store_id.as_bytes()],
         bump)]
     pub store: Account<'info, Store>,
 
-    #[account(mut, has_one=owner, seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()], bump=company.bump)]
-    pub company: Account<'info, Company>,
-    
     #[account(mut)]
     pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -158,16 +93,12 @@ pub struct CreateStore<'info> {
 
 
 #[derive(Accounts)]
-#[instruction(_company_number: u32, _store_number: u32)]
 pub struct UpdateStore<'info> {
     #[account(mut, 
         has_one=owner,
-        seeds=[STORE_SEED_BYTES, company.key().as_ref(), &_store_number.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
         bump = store.bump)]   
     pub store: Account<'info, Store>,
-
-    #[account(has_one=owner, seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()], bump=company.bump)]
-    pub company: Account<'info, Company>,
 
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -175,8 +106,8 @@ pub struct UpdateStore<'info> {
 
 //consider using metaxplex for this.
 #[derive(Accounts)]
-#[instruction(_company_number: u32, _store_number: u32,  _decimals: u8)]
-pub struct CreateProduct<'info> {
+#[instruction(_product_id: String, _decimals: u8)]
+pub struct CreateStoreProduct<'info> {
 
     #[account(
         init,
@@ -190,11 +121,7 @@ pub struct CreateProduct<'info> {
     #[account(init,
         payer=owner,
         space=8+PRODUCT_SIZE, 
-        seeds=[
-            PRODUCT_SEED_BYTES,
-            store.key().as_ref(),
-            &store.product_count.to_be_bytes()
-        ], 
+        seeds=[PRODUCT_SEED_BYTES, _product_id.as_bytes()], 
         bump)]
     pub product: Account<'info, Product>,
 
@@ -216,18 +143,11 @@ pub struct CreateProduct<'info> {
         bump)]
     pub mint_product_ref: Account<'info, MintProductRef>,
 
-
     #[account(mut @ ErrorCode::NotMutable,
         has_one=owner @ ErrorCode::IncorrectOwner, 
-        seeds=[STORE_SEED_BYTES, company.key().as_ref(), &_store_number.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
         bump=store.bump)]
     pub store: Account<'info, Store>,
-
-
-    #[account(has_one=owner @ ErrorCode::IncorrectOwner,
-        seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()],
-        bump=company.bump)]
-    pub company: Account<'info, Company>,
   
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -238,28 +158,18 @@ pub struct CreateProduct<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(_company_number: u32, _store_number: u32, _product_number: u64)]
-pub struct UpdateProduct<'info> {
+pub struct UpdateStoreProduct<'info> {
     #[account(mut @ ErrorCode::NotMutable,
         has_one=owner @ ErrorCode::IncorrectOwner,
-        seeds=[
-            PRODUCT_SEED_BYTES,
-            store.key().as_ref(),
-            &_product_number.to_be_bytes()
-        ], 
+        seeds=[PRODUCT_SEED_BYTES, product.product_id.as_bytes()], 
         bump = product.bump
     )]
     pub product: Account<'info, Product>,
 
     #[account(has_one=owner @ ErrorCode::IncorrectOwner, 
-        seeds=[STORE_SEED_BYTES, company.key().as_ref(), &_store_number.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
         bump=store.bump)]
     pub store: Account<'info, Store>,
-
-    #[account(has_one=owner @ ErrorCode::IncorrectOwner,
-        seeds=[COMPANY_SEED_BYTES, &_company_number.to_be_bytes()],
-        bump=company.bump)]
-    pub company: Account<'info, Company>,
 
     #[account(mut)]
     pub owner: Signer<'info>
@@ -268,31 +178,13 @@ pub struct UpdateProduct<'info> {
 
 
 
-pub const METADATA_SIZE: usize = 1 + 4;
-#[account]
-pub struct MetaData {
-    pub bump: u8, //1;
-    pub company_count: u32, //4; //keep track of number of companies. 
-}
-
-pub const COMPANY_SIZE: usize = 1 + 4 + 32 + 4;
-#[account]
-pub struct Company{
-    pub bump: u8, //1;
-    pub company_number: u32, //4;
-    pub owner: Pubkey, //32;    
-    pub store_count: u32, //4; tracks store count. used as part of seed for store PDA's
-}
-
-
-pub const STORE_SIZE: usize = 1 + 32 + 32 + 4 + 8 + (4+250) + (4+200);
+pub const STORE_SIZE: usize = 1 + 32 + 32 + 8 + (4+250) + (4+200);
 #[account]
 pub struct Store{
     pub bump: u8, //1; bump used for this PDA
-    pub company: Pubkey, //32;
+    pub store_id: String, //32;
     pub owner: Pubkey, //32; current owner
-    pub store_number: u32, //4;
-    pub product_count: u64, //8; tracks product count. used as part of seed for product PDA's
+    pub product_count: u64, //8; tracks product count.
     pub name: String, //4+250; store name
     pub description: String, //4+200; store description
    
@@ -301,15 +193,14 @@ pub struct Store{
 }
 
 
-pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + 32 + 8 + 8 + (4+250) + (4+200) + (4+25);
+pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + (1+32) +  8 + (4+250) + (4+200) + (4+25);
 #[account]
 pub struct Product{
     pub bump: u8, //1;
+    pub product_id: String, //32;
     pub owner: Pubkey, //32; address allowed to make changes
-    pub store: Pubkey, //32; address of store PDA  
-    pub company: Pubkey, //32; address of company PDA
+    pub store: Option<Pubkey>, //1+32; address of store PDA
     pub cost: u64, //8;
-    pub product_number: u64, //8; keeps track of which product number this is out of the store.product_count
     pub name: String, //4+250; product name
     pub description: String, //4+200; product description
     pub sku: String, //4+25; This gives the ability to relate the product to a sku in some catalog - not used natively
