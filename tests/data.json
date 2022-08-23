@@ -1,0 +1,26 @@
+{ 
+    "stores": [
+    {
+        "name": "Anatoly Yakovenko Official",
+        "description": "Hi! Come watch me eat glass!",
+        "images": ["https://cryptosrus.com/wp-content/uploads/2021/12/Anatoly-Yakovenko-of-Solana-Reveals-Why-Were-Not-in-a-Crypto-Bubble.jpg"],
+        "twitter": "https://twitter.com/aeyakovenko",
+        "instagram": "https://www.instagram.com/anatolyyakovenko.sola/",
+        "wiki": "https://everipedia.org/wiki/lang_en/anatoly-yakovenko"
+    },
+    {
+        "name": "Dua Lipa Official",
+        "description": "This is the official Dua Lipa store!",
+        "images": ["https://www.dualipa.com/wp-content/uploads/2019/10/DONT_START_NOW.jpg"],
+        "twitter": "https://twitter.com/DUALIPA",
+        "instagram": "https://www.instagram.com/dualipa",
+        "facebook": "https://www.facebook.com/DuaLipa",
+        "web": "https://www.dualipa.com/",
+        "wiki": "https://en.wikipedia.org/wiki/Dua_Lipa"
+    },
+    {
+        "name": "Busy Media Inc.",
+        "description": "Busy Media Inc. is the leading distributor of music, videos, books and art!",
+        "images": ["https://theworldunplugged.files.wordpress.com/2010/11/screen-shot-2010-12-07-at-1-35-48-pm.png"]
+    }]
+}

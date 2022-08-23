@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Mint};
 
-declare_id!("ECUN8sf6PiSxXD5E3rBd9ZSWonoxb6G9HJHuPQB4vfBg");
+declare_id!("8vuboQrAS2RDBYs7YoYN9Vik4Kv3JMc7ui4Fnc9VTkAP");
 
 const STORE_SEED_BYTES : &[u8] ="store".as_bytes();
 const PRODUCT_SEED_BYTES : &[u8] = "product".as_bytes();
@@ -12,31 +12,36 @@ const MINT_PRODUCT_REF_SEED_BYTES : &[u8] = "mint_product_ref".as_bytes();
 pub mod twine {
     use super::*;
     
-    pub fn create_store(ctx: Context<CreateStore>, _store_id: String, name: String, description: String) -> Result<()> {
+    pub fn create_store(ctx: Context<CreateStore>, _store_id: String, name: String, description: String, 
+        data: String) -> Result<()> {
+        msg!("data len is {}", &data.len().to_string());
+        
         let store = &mut ctx.accounts.store;
 
         store.bump = *ctx.bumps.get("store").unwrap();
         store.store_id =_store_id;
         store.owner = ctx.accounts.owner.key();
         store.name = name;
-        store.description = description;        
+        store.description = description;
         store.product_count = 0;
+        store.data = data;
 
         Ok(())
     }
 
 
-    pub fn update_store(ctx: Context<UpdateStore>, name: String, description: String) -> Result<()> {
+    pub fn update_store(ctx: Context<UpdateStore>, name: String, description: String, data: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
         store.name = name;
         store.description = description;
+        store.data = data;
 
         Ok(())
     }
 
 
     pub fn create_product(ctx: Context<CreateProduct>, _product_id: String, _decimals: u8,
-        name: String, description: String, cost: u64, sku: String) -> Result<()> {
+        name: String, description: String, cost: u64, sku: String, data: String) -> Result<()> {
         let owner = &ctx.accounts.owner;
         let product = &mut ctx.accounts.product;    
         let mint_product_ref = &mut ctx.accounts.mint_product_ref;
@@ -49,6 +54,7 @@ pub mod twine {
         product.description = description;
         product.cost = cost;
         product.sku = sku;
+        product.data = data;
 
         mint_product_ref.bump = *ctx.bumps.get("mint_product_ref").unwrap();
         mint_product_ref.product = product.key();
@@ -57,7 +63,7 @@ pub mod twine {
     }
 
     pub fn create_store_product(ctx: Context<CreateStoreProduct>, _product_id: String, _decimals: u8,
-                name: String, description: String, cost: u64, sku: String) -> Result<()> {
+                name: String, description: String, cost: u64, sku: String, data: String) -> Result<()> {
         let owner = &ctx.accounts.owner;
         let store = &mut ctx.accounts.store;
         let product = &mut ctx.accounts.product;    
@@ -71,6 +77,7 @@ pub mod twine {
         product.description = description;
         product.cost = cost;
         product.sku = sku;
+        product.data = data;
         
         mint_product_ref.bump = *ctx.bumps.get("mint_product_ref").unwrap();
         mint_product_ref.product = product.key();
@@ -80,12 +87,13 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn update_product(ctx: Context<UpdateProduct>, name: String, description: String, cost: u64, sku: String) -> Result<()> {
+    pub fn update_product(ctx: Context<UpdateProduct>, name: String, description: String, cost: u64, sku: String, data: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
         product.name = name;
         product.description = description;
         product.cost = cost;
         product.sku = sku;
+        product.data = data;
 
         Ok(())
     }
@@ -94,14 +102,14 @@ pub mod twine {
 
 
 #[derive(Accounts)]
-#[instruction(_store_id: String)]
+#[instruction(_store_id: String, name: String, description: String, data: String)]
 pub struct CreateStore<'info> {
     #[account(init,
         payer=owner,
-        space=8+STORE_SIZE, 
+        space=8 + STORE_SIZE + data.len(),
         seeds=[STORE_SEED_BYTES, _store_id.as_bytes()],
         bump)]
-    pub store: Account<'info, Store>,
+    pub store: Box<Account<'info, Store>>,
 
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -110,20 +118,25 @@ pub struct CreateStore<'info> {
 
 
 #[derive(Accounts)]
+#[instruction(name: String, description: String, data: String)]
 pub struct UpdateStore<'info> {
     #[account(mut, 
         has_one=owner,
+        realloc = 8 + STORE_SIZE + data.len(),
+        realloc::payer = owner,
+        realloc::zero = true,
         seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
         bump = store.bump)]   
-    pub store: Account<'info, Store>,
+    pub store: Box<Account<'info, Store>>,
 
     #[account(mut)]
     pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 //consider using metaplex for this.
 #[derive(Accounts)]
-#[instruction(_product_id: String, _decimals: u8)]
+#[instruction(_product_id: String, _decimals: u8, name: String, description: String, cost: u64, sku: String, data: String)]
 pub struct CreateStoreProduct<'info> {
 
     #[account(
@@ -137,10 +150,10 @@ pub struct CreateStoreProduct<'info> {
   
     #[account(init,
         payer=owner,
-        space=8+PRODUCT_SIZE, 
+        space=8 + PRODUCT_SIZE + data.len(), 
         seeds=[PRODUCT_SEED_BYTES, _product_id.as_bytes()], 
         bump)]
-    pub product: Account<'info, Product>,
+    pub product: Box<Account<'info, Product>>,
 
     #[account(init,
         payer=owner,
@@ -175,7 +188,7 @@ pub struct CreateStoreProduct<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(_product_id: String, _decimals: u8)]
+#[instruction(_product_id: String, _decimals: u8, name: String, description: String, cost: u64, sku: String, data: String )]
 pub struct CreateProduct<'info> {
 
     #[account(
@@ -189,10 +202,10 @@ pub struct CreateProduct<'info> {
   
     #[account(init,
         payer=owner,
-        space=8+PRODUCT_SIZE, 
+        space=8 +PRODUCT_SIZE + data.len(), 
         seeds=[PRODUCT_SEED_BYTES, _product_id.as_bytes()], 
         bump)]
-    pub product: Account<'info, Product>,
+    pub product: Box<Account<'info, Product>>,
 
     #[account(init,
         payer=owner,
@@ -221,37 +234,43 @@ pub struct CreateProduct<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(name: String, description: String, cost: u64, sku: String, data: String)]
 pub struct UpdateProduct<'info> {
     #[account(mut @ ErrorCode::NotMutable,
+        realloc = 8 + PRODUCT_SIZE + data.len(),
+        realloc::payer = owner,
+        realloc::zero = true,
         has_one=owner @ ErrorCode::IncorrectOwner,
         seeds=[PRODUCT_SEED_BYTES, product.product_id.as_bytes()], 
         bump = product.bump
     )]
-    pub product: Account<'info, Product>,
+    pub product: Box<Account<'info, Product>>,
 
     #[account(mut)]
-    pub owner: Signer<'info>
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 
 
 
-pub const STORE_SIZE: usize = 1 + 32 + 32 + 8 + (4+250) + (4+200);
+pub const STORE_SIZE: usize = 1 + 32 + 32 + 8 + (4+100) + (4+200) + 4;
 #[account]
 pub struct Store{
     pub bump: u8, //1; bump used for this PDA
     pub store_id: String, //32;
     pub owner: Pubkey, //32; current owner
     pub product_count: u64, //8; tracks product count.
-    pub name: String, //4+250; store name
+    pub name: String, //4+100; store name
     pub description: String, //4+200; store description
-   
+    pub data: String,//4+data bytes determined at create time
+    
     //pub verified_by: Option<Pubkey>, //1 + 32; If verified, verified by who? store this outside this account
     //pub rating: u8, //8; current rating; store this outside of the account
 }
 
 
-pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + (1+32) +  8 + (4+250) + (4+200) + (4+25);
+pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + (1+32) +  8 + (4+100) + (4+200) + (4+25) + 4;
 #[account]
 pub struct Product{
     pub bump: u8, //1;
@@ -259,9 +278,10 @@ pub struct Product{
     pub owner: Pubkey, //32; address allowed to make changes
     pub store: Option<Pubkey>, //1+32; address of store PDA
     pub cost: u64, //8;
-    pub name: String, //4+250; product name
+    pub name: String, //4+100; product name
     pub description: String, //4+200; product description
     pub sku: String, //4+25; This gives the ability to relate the product to a sku in some catalog - not used natively
+    pub data: String, //4+;
     //pub category: u64, //64; bitwise AND masked identifier    
     //pub verified_by: Option<Pubkey>, //1 + 8; store this outside of this account    
     //pub rating: u8, //8; current rating; store this outside of the account
