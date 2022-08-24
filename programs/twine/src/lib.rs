@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Mint};
 
-declare_id!("As7y8WMHdrfqmBLkTxKVNDLrY6oEHsuh7HNQZb5LwpQm");
+declare_id!("DyQg7GpUX5Ev62eHk7j6qAUka2eMJWiedjE7YPfN9yRZ");
 
 const STORE_SEED_BYTES : &[u8] ="store".as_bytes();
 const PRODUCT_SEED_BYTES : &[u8] = "product".as_bytes();
@@ -256,12 +256,12 @@ pub struct UpdateProduct<'info> {
 pub const STORE_SIZE: usize = 1 + 32 + 32 + 8 + (4+100) + (4+200) + 4;
 #[account]
 pub struct Store{
-    pub bump: u8, //1; bump used for this PDA
-    pub store_id: String, //32;
+    pub bump: u8, //1; bump used for this PDA    
     pub owner: Pubkey, //32; current owner
-    pub product_count: u64, //8; tracks product count.
+    pub product_count: u64, //8; tracks product count.    
     pub name: String, //4+100; store name
     pub description: String, //4+200; store description
+    pub store_id: String, //32;
     pub data: String,//4+data bytes determined at create time
     
     //pub verified_by: Option<Pubkey>, //1 + 32; If verified, verified by who? store this outside this account
@@ -273,13 +273,13 @@ pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + (1+32) +  8 + (4+100) + (4+200) + 
 #[account]
 pub struct Product{
     pub bump: u8, //1;
-    pub product_id: String, //32;
     pub owner: Pubkey, //32; address allowed to make changes
     pub store: Option<Pubkey>, //1+32; address of store PDA
     pub cost: u64, //8;
     pub name: String, //4+100; product name
     pub description: String, //4+200; product description
     pub sku: String, //4+25; This gives the ability to relate the product to a sku in some catalog - not used natively
+    pub product_id: String, //32;
     pub data: String, //4+;
     //pub category: u64, //64; bitwise AND masked identifier    
     //pub verified_by: Option<Pubkey>, //1 + 8; store this outside of this account    
