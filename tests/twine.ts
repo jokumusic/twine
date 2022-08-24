@@ -97,7 +97,7 @@ describe("twine", () => {
   it("Update Store", async () => {
     const updatedStoreName = storeName + "-updated";
     const updatedStoreDescription = storeDescription + "-updated";
-    const data = "{cause_realloc: true}";
+    const data = JSON.stringify({updated: true});
 
     //this should succeed because the owner is correct
     const tx = await program.methods
@@ -201,7 +201,7 @@ describe("twine", () => {
     const updatedProductDescription = productDescription + "-updated";
     const updatedProductSku = productSku + "-updated";
     const updatedProductCost = 200000;
-    const data = "{updated:true}";
+    const data = JSON.stringify({updated:true});
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
@@ -303,7 +303,7 @@ describe("twine", () => {
     const updatedProductDescription = productDescription + "-updated";
     const updatedProductSku = productSku + "-updated";
     const updatedProductCost = 200000;
-    const updatedData = "{updated: true}";
+    const updatedData = JSON.stringify({updated: true});
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
