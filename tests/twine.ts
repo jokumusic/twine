@@ -7,10 +7,18 @@ import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
 import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createMint} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
-import crypto from "crypto";
 import * as data from './data.json';
 import { compress, decompress, trimUndefined, trimUndefinedRecursively } from 'compress-json'
 
+const generateRandomString = (length: number) => {
+  const char = 'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890';
+  const random = Array.from(
+      {length: length},
+      () => char[Math.floor(Math.random() * char.length)]
+  );
+  const randomString = random.join("");
+  return randomString;
+}
 
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
@@ -22,12 +30,12 @@ console.log('owner pubkey: ', ownerKeypair.publicKey.toBase58());
 
 describe("twine", () => {
   const program = anchor.workspace.Twine as Program<Twine>;
-  const storeId = crypto.randomBytes(12).toString();
+  const storeId = generateRandomString(12);
   const storeName = "test-store";
   const storeDescription = "test-store description";
   
-  const storeProductId = crypto.randomBytes(12).toString();
-  const loneProductId = crypto.randomBytes(12).toString();
+  const storeProductId = generateRandomString(12);
+  const loneProductId = generateRandomString(12);
   const productName = "test-product";
   const productDescription = "test-product-description";
   const productCost = new BN(100000);
@@ -53,7 +61,7 @@ describe("twine", () => {
   before((done) => {
     console.log('funding owner account');
     provider.connection
-      .requestAirdrop(ownerKeypair.publicKey, 120_000_000)
+      .requestAirdrop(ownerKeypair.publicKey, 140_000_000)
       .then(async(signature) =>{
         const response = await provider.connection.confirmTransaction(signature);
         done();
@@ -319,41 +327,167 @@ describe("twine", () => {
     expect(updatedProduct.data).is.equal(updatedData);
   });
 
+
   describe("Mock Data", ()=>{
-    
-    it("load", async ()=> {
+      
+    it("load stores", async ()=> {
+
       for(let store of data.stores) {
-        const mockStoreId = crypto.randomBytes(12).toString();
+        const storeId = store.id;        
         const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
             [
             anchor.utils.bytes.utf8.encode("store"),                                                
-            anchor.utils.bytes.utf8.encode(mockStoreId)
+            anchor.utils.bytes.utf8.encode(storeId)
             ], program.programId);
+
+        const existingStore = await program.account.store.fetchNullable(mockStorePda);
+        if(existingStore)
+            continue;
         
+        //console.log('-', storeId, ':', mockStorePda.toBase58());
 
         trimUndefined(store);
-        //console.log('trimmed: ', store);
         const compressedStore = compress(store);
+        //console.log('compressedStore: ', compressedStore);
         const dataString = JSON.stringify(compressedStore);
-        //console.log('dataString.length: ', dataString.length);
+        //console.log('dataString: ', dataString);
         const tx = await program.methods
-        .createStore(mockStoreId, store.name, store.description, dataString)
+        .createStore(storeId, store.name, store.description, dataString)
         .accounts({
             store: mockStorePda,
             owner: ownerKeypair.publicKey,
         })
         .transaction();
 
-        //console.log('tx: ', tx);
         const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);     
         
         const createdStore = await program.account.store.fetch(mockStorePda);
+        expect(createdStore.storeId).is.equal(storeId);
         expect(createdStore.name).is.equal(store.name);
         expect(createdStore.description).is.equal(store.description);
         expect(createdStore.data).is.equal(dataString);      
       }
 
     });
-  });
+
+    it("load products", async ()=> {      
+      
+      for(let product of data.products)
+      {        
+        const productId = product.id;
+        const [productPda, productPdaBump] = PublicKey.findProgramAddressSync(
+          [
+            anchor.utils.bytes.utf8.encode("product"),                                                
+            anchor.utils.bytes.utf8.encode(productId)
+          ], program.programId);
+
+        const existingProduct = program.account.product.fetchNullable(productPda);
+        if(existingProduct)
+          continue;
+
+        const mintKeypair = Keypair.generate();
+        const storeId = product.storeId;
+        const productMintDecimals = product.decimals ?? 0;
+        const productName = product.name;
+        const productDescription = product.description;
+        const productPrice = product.price ?? 0;
+        const productSku = product.sku ?? ""; 
+
+        const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync(
+          [
+            anchor.utils.bytes.utf8.encode("product_mint"),
+            mintKeypair.publicKey.toBuffer()
+          ], program.programId);
+    
+        const [mintProductRefPda, mintProductRefPdaBump] = PublicKey.findProgramAddressSync(
+          [
+            anchor.utils.bytes.utf8.encode("mint_product_ref"),
+            mintKeypair.publicKey.toBuffer()
+          ], program.programId);
+       
+        trimUndefined(product);
+        const compressedProduct= compress(product);        
+        const dataString = JSON.stringify(compressedProduct);       
+        let tx = null;
+
+        if(storeId){
+          const [storePda, storePdaBump] = PublicKey.findProgramAddressSync(
+            [
+              anchor.utils.bytes.utf8.encode("store"),                                                
+              anchor.utils.bytes.utf8.encode(storeId)
+            ], program.programId);
+
+            console.log('product.storeId: ', product.storeId);
+            console.log('storeId: ', storeId);
+            console.log('pda: ', storePda.toBase58());
+
+          tx = await program.methods
+                .createStoreProduct(productId, 
+                    productMintDecimals,
+                    productName, 
+                    productDescription, 
+                    new BN(productPrice), 
+                    productSku,
+                    dataString)
+                .accounts({
+                    mint: mintKeypair.publicKey,
+                    product: productPda,
+                    productMint: productMintPda,
+                    mintProductRef: mintProductRefPda,
+                    store: storePda,
+                    owner: ownerKeypair.publicKey,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                    twineProgram: program.programId,
+                })
+                .transaction();
+        } 
+        else {
+          tx = await program.methods
+                .createProduct(productId, 
+                    productMintDecimals,
+                    productName, 
+                    productDescription, 
+                    new BN(productPrice), 
+                    productSku,
+                    dataString)
+                .accounts({
+                    mint: mintKeypair.publicKey,
+                    product: productPda,
+                    productMint: productMintPda,
+                    mintProductRef: mintProductRefPda,
+                    owner: ownerKeypair.publicKey,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                    twineProgram: program.programId,
+                })
+                .transaction();
+        }
+        
+        tx.feePayer = ownerKeypair.publicKey;
+        tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+        tx.partialSign(mintKeypair)    
+        tx.partialSign(ownerKeypair);
+        
+        const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
+          tx.serialize({
+              requireAllSignatures: true,
+              verifySignatures: true,
+          }), {skipPreflight: true});
+
+        //console.log('tx: ', tx);
+        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);     
+        
+        const createdProduct = await program.account.store.fetch(productPda);
+        expect(createdProduct.bump).is.equal(productPdaBump);
+        expect(createdProduct.productId).is.equal(productId); 
+        expect(createdProduct.owner).is.eql(ownerKeypair.publicKey);
+        expect(createdProduct.name).is.equal(productName);
+        expect(createdProduct.description).is.equal(productDescription)
+        expect(createdProduct.cost.toNumber()).is.equal(productPrice);
+        expect(createdProduct.sku).is.equal(productSku);
+        expect(createdProduct.data).is.equal(dataString);     
+      }
+    }); //load products
+
+  }); //mock data
 
 });

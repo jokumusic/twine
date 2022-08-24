@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount, Mint};
 
-declare_id!("8vuboQrAS2RDBYs7YoYN9Vik4Kv3JMc7ui4Fnc9VTkAP");
+declare_id!("6uSxZoD2PPGFFwmT6e4WzGzDT8qQjQPQQ3XjDpSbpgZx");
 
 const STORE_SEED_BYTES : &[u8] ="store".as_bytes();
 const PRODUCT_SEED_BYTES : &[u8] = "product".as_bytes();
@@ -82,7 +82,7 @@ pub mod twine {
         mint_product_ref.bump = *ctx.bumps.get("mint_product_ref").unwrap();
         mint_product_ref.product = product.key();
 
-        store.product_count += 1; 
+        store.product_count += 1;
 
         Ok(())
     }
@@ -177,7 +177,7 @@ pub struct CreateStoreProduct<'info> {
         has_one=owner @ ErrorCode::IncorrectOwner, 
         seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
         bump=store.bump)]
-    pub store: Account<'info, Store>,
+    pub store: Box<Account<'info, Store>>,
   
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -250,7 +250,6 @@ pub struct UpdateProduct<'info> {
     pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
-
 
 
 
