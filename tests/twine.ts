@@ -1,96 +1,206 @@
 import * as anchor from "@project-serum/anchor";
 import { Program } from "@project-serum/anchor";
 import { Twine } from "../target/types/twine";
-import {PublicKey, Keypair, sendAndConfirmTransaction } from "@solana/web3.js";
+import {PublicKey, Keypair, sendAndConfirmTransaction, SYSVAR_CLOCK_PUBKEY } from "@solana/web3.js";
 import { assert, expect } from "chai";
 import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
-import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createMint} from "@solana/spl-token";
+import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAccount} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
 import * as data from './data.json';
 import { compress, decompress, trimUndefined, trimUndefinedRecursively } from 'compress-json'
 
-const generateRandomString = (length: number) => {
-  const char = 'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890';
-  const random = Array.from(
-      {length: length},
-      () => char[Math.floor(Math.random() * char.length)]
-  );
-  const randomString = random.join("");
-  return randomString;
+const generateRandomU16 = () => {
+  return Math.floor(Math.random() * Math.pow(2,16));
 }
+
+const generateRandomU32 = () => {
+  return Math.floor(Math.random() * Math.pow(2,16));
+}
+
+const uIntToBytes = (num, size, method) => {
+  const arr = new ArrayBuffer(size)
+  const view = new DataView(arr)
+  view[method + (size * 8)](0, num)
+  return arr
+}
+
+const toBytes = (data, type) =>
+  type == "u8"  ? uIntToBytes(data, 1, "setUint") :
+  type == "u16" ? uIntToBytes(data, 2, "setUint") :
+  type == "u32" ? uIntToBytes(data, 4, "setUint") :
+  type == "u64" ? uIntToBytes(BigInt(data), 8, "setBigUint")
+                : `Not Sure about type - ${type}`
 
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
-const ownerKeypair = Keypair.generate();
+const creatorKeypair = Keypair.generate();
+const paytoKeypair = Keypair.generate();
+const creatorAccountLamportsRequired = 300_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
+const paytoAccountLamportsRequired = 40_000_000; //funds transferred from creatorAccount
+
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
-console.log('owner pubkey: ', ownerKeypair.publicKey.toBase58());
+console.log('creator pubkey: ', creatorKeypair.publicKey.toBase58());
+console.log('payto: ', paytoKeypair.publicKey.toBase58());
 
 
 describe("twine", () => {
   const program = anchor.workspace.Twine as Program<Twine>;
-  const storeId = generateRandomString(12);
+  const storeId = generateRandomU16();
   const storeName = "test-store";
   const storeDescription = "test-store description";
   
-  const storeProductId = generateRandomString(12);
-  const loneProductId = generateRandomString(12);
+  const storeProductId = generateRandomU32();
+  const loneProductId = generateRandomU32();
   const productName = "test-product";
   const productDescription = "test-product-description";
-  const productCost = new BN(100000);
-  const productSku = "skubeedoo"
+  const productPrice = new BN(100000);
+  const productStatus = 1;
+  const productInventory = new BN(5);
 
+  let [programMetadataPda, programMetadataPdaBump] = PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode("program_metadata"), 
+      creatorKeypair.publicKey.toBuffer(),
+    ], program.programId);
   let [storePda, storePdaBump] = PublicKey.findProgramAddressSync(
     [
-      anchor.utils.bytes.utf8.encode("store"),                                                
-      anchor.utils.bytes.utf8.encode(storeId)
+      anchor.utils.bytes.utf8.encode("store"), 
+      creatorKeypair.publicKey.toBuffer(),             
+      Buffer.from(uIntToBytes(storeId,2,"setUint"))
     ], program.programId);
   let [storeProductPda, storeProductPdaBump] = PublicKey.findProgramAddressSync(
     [
       anchor.utils.bytes.utf8.encode("product"),
-      anchor.utils.bytes.utf8.encode(storeProductId)
+      creatorKeypair.publicKey.toBuffer(),
+      Buffer.from(uIntToBytes(storeProductId,4,"setUint"))
     ], program.programId);
   let [loneProductPda, loneProductPdaBump] = PublicKey.findProgramAddressSync(
     [
       anchor.utils.bytes.utf8.encode("product"),
-      anchor.utils.bytes.utf8.encode(loneProductId)
+      creatorKeypair.publicKey.toBuffer(),
+      Buffer.from(uIntToBytes(loneProductId,4,"setUint"))
     ], program.programId);
 
+  /*
+  let [storeProductMintPda, storeProductMintPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("mint"),
+        storeProductPda.toBuffer(),
+      ], program.programId);
 
-  before((done) => {
-    console.log('funding owner account');
-    provider.connection
-      .requestAirdrop(ownerKeypair.publicKey, 140_000_000)
-      .then(async(signature) =>{
-        const response = await provider.connection.confirmTransaction(signature);
-        done();
-      })
-      .catch(err=>done(err));
+  let [loneProductMintPda, loneProductMintPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("mint"),
+        loneProductPda.toBuffer(),
+      ], program.programId);
+  */
+
+  before(() => {
+    return new Promise<void>(async (resolve,reject) => {
+      let errored=false;
+      console.log(`funding creator account with ${creatorAccountLamportsRequired} lamports...`);
+      
+      const airdropSignature = await provider.connection
+        .requestAirdrop(creatorKeypair.publicKey, creatorAccountLamportsRequired)
+        .catch(err=>{errored=true; reject(err)});
+
+      if(errored)
+        return;
+
+      const airdropConfirmation = await provider.connection
+        .confirmTransaction(airdropSignature,'confirmed')
+        .catch(err=>{errored=true; reject(err);});
+
+      if(errored)
+        return;
+      
+      console.log(`funding pay_to account with ${paytoAccountLamportsRequired} lamports...`);
+      const transfer_tx = new anchor.web3.Transaction().add(
+          anchor.web3.SystemProgram.transfer({
+            fromPubkey: creatorKeypair.publicKey,
+            toPubkey: paytoKeypair.publicKey,
+            lamports: paytoAccountLamportsRequired,
+          })
+      );
+
+      transfer_tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+      transfer_tx.feePayer = creatorKeypair.publicKey;
+
+      const transfer_results = await anchor.web3
+      .sendAndConfirmTransaction(provider.connection, transfer_tx, [creatorKeypair], {commitment: 'confirmed'})
+      .catch(err=>{errored=true; reject(err);});
+
+      if(errored)
+        return;
+
+      resolve();
+    });
   });
 
 
-  it("Create Store", async () => {
-    const data = "";
+
+/*
+  it("Initialize Program", async () => {
+    let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
+    
+    if(programMetadata) {
+      console.log('program metadata is already initialized')
+      return;
+    }
 
     const tx = await program.methods
-    .createStore(storeId, storeName, storeDescription,"")
+    .initialize()
     .accounts({
-      store: storePda,
-      owner: ownerKeypair.publicKey,
+      programMetadata: programMetadataPda,
+      creator: creatorKeypair.publicKey,
+      authority: creatorKeypair.publicKey,
+      secondaryAuthority: creatorKeypair.publicKey,
+      feeAccount: creatorKeypair.publicKey,    
     })
     .transaction();
 
-    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
+    
+    programMetadata = await program.account.programMetadata.fetch(programMetadataPda);
+    expect(programMetadata.bump).is.equal(programMetadataPdaBump);
+    expect(programMetadata.initialized).is.equal(true);
+    expect(programMetadata.version).is.equal(0);
+    expect(programMetadata.creator).is.eql(creatorKeypair.publicKey);
+    expect(programMetadata.authority).is.eql(creatorKeypair.publicKey);
+    expect(programMetadata.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(programMetadata.feeAccount).is.eql(creatorKeypair.publicKey);
+  });
+
+  it("Create Store", async () => {
+    const data = JSON.stringify(compress({}));
+
+    const tx = await program.methods
+    .createStore(storeId, 1, storeName, storeDescription, data)
+    .accounts({
+      store: storePda,
+      creator: creatorKeypair.publicKey,
+      authority: creatorKeypair.publicKey,
+      secondaryAuthority: creatorKeypair.publicKey,    
+    })
+    .transaction();
+
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
     
     const createdStore = await program.account.store.fetch(storePda);
     expect(createdStore.bump).is.equal(storePdaBump);
-    expect(createdStore.storeId).is.equal(storeId);
-    expect(createdStore.owner).is.eql(ownerKeypair.publicKey);
+    expect(createdStore.status).is.equal(1);
+    expect(createdStore.id).is.equal(storeId);
+    expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
+    expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
+    expect(createdStore.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(createdStore.tag.toNumber()).is.equal(0);
     expect(createdStore.name).is.equal(storeName);
     expect(createdStore.description).is.eql(storeDescription);
     expect(createdStore.productCount.toNumber()).is.equal(0);  
     expect(createdStore.data).is.equal(data);
+    
   });
 
 
@@ -104,65 +214,56 @@ describe("twine", () => {
     .updateStore(updatedStoreName, updatedStoreDescription, data)
     .accounts({
       store: storePda,
-      owner: ownerKeypair.publicKey,      
+      authority: creatorKeypair.publicKey,
     })
     .transaction();
 
-    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
 
     const updatedStore= await program.account.store.fetch(storePda);
     expect(updatedStore.bump).is.equal(storePdaBump);
-    expect(updatedStore.storeId).is.equal(storeId);
+    expect(updatedStore.status).is.equal(1);
+    expect(updatedStore.creator).is.eql(creatorKeypair.publicKey);
+    expect(updatedStore.authority).is.eql(creatorKeypair.publicKey);
+    expect(updatedStore.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(updatedStore.id).is.equal(storeId);
+    expect(updatedStore.tag.toNumber()).is.equal(0);
+    expect(updatedStore.productCount.toNumber()).is.equal(0);  
     expect(updatedStore.name).is.equal(updatedStoreName);
     expect(updatedStore.description).is.equal(updatedStoreDescription);
-    expect(updatedStore.owner).is.eql(ownerKeypair.publicKey);
     expect(updatedStore.data).is.eql(data);
+
   });
 
 
-
   it("Create Store Product", async () => {    
-    const productMintDecimals = 3;
-    const mintKeypair = Keypair.generate();
-    const data="";
-    
-    const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("product_mint"),
-      mintKeypair.publicKey.toBuffer()
-    ], program.programId);
-
-    const [mintProductRefPda, mintProductRefPdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("mint_product_ref"),
-      mintKeypair.publicKey.toBuffer()
-    ], program.programId);
-
+    //const productMintDecimals = 3;
+    const data = JSON.stringify({updated: true});
 
     const tx = await program.methods
-    .createStoreProduct(storeProductId, productMintDecimals, productName, productDescription, productCost, productSku, data)
-    .accounts({
-      mint: mintKeypair.publicKey,
-      product: storeProductPda,
-      productMint: productMintPda,
-      mintProductRef: mintProductRefPda,
-      store: storePda,
-      owner: ownerKeypair.publicKey,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      twineProgram: program.programId,
-    })
-    .transaction();
+      .createStoreProduct(storeProductId, productStatus, //productMintDecimals, 
+      productPrice, productInventory, productName, productDescription, data)
+      .accounts({
+        //mint: storeProductMintPda,
+        product: storeProductPda,
+        store: storePda,
+        creator: creatorKeypair.publicKey,
+        authority: creatorKeypair.publicKey,
+        secondaryAuthority: creatorKeypair.publicKey,  
+        payTo: paytoKeypair.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .transaction();
    
     //setting feepayer,recentblockhash and then partialsigning is being done here, because that's the way it has to be done by mobile/web app client
     //because they have to use a separate wallet program for signing
-    tx.feePayer = ownerKeypair.publicKey;
+    tx.feePayer = creatorKeypair.publicKey;
     tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-    tx.partialSign(mintKeypair)    
-    tx.partialSign(ownerKeypair); //this is where the wallet would be called to sign the transaction
+    tx.partialSign(creatorKeypair); //this is where the wallet would be called to sign the transaction
     
     const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
-      tx.serialize({
-          requireAllSignatures: true,
-          verifySignatures: true,
-      }), {skipPreflight: true});
+      tx.serialize({ requireAllSignatures: true, verifySignatures: true }), 
+      {skipPreflight: true, commitment:'confirmed'});
 
     //console.log('txid: ', txid);
     //const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
@@ -170,174 +271,263 @@ describe("twine", () => {
 
     const createdProduct = await program.account.product.fetch(storeProductPda);
     expect(createdProduct.bump).is.equal(storeProductPdaBump);
-    expect(createdProduct.productId).is.equal(storeProductId); 
-    expect(createdProduct.owner).is.eql(ownerKeypair.publicKey);
+    expect(createdProduct.status).is.equal(productStatus);
+    expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
+    expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
+    expect(createdProduct.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(createdProduct.id).is.equal(storeProductId); 
+    expect(createdProduct.tag.toNumber()).is.equal(0); 
+    //expect(createdProduct.mint).is.eql(storeProductMintPda);
+    expect(createdProduct.payTo).is.eql(paytoKeypair.publicKey);
     expect(createdProduct.store).is.eql(storePda); 
+    expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
+    expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
     expect(createdProduct.name).is.equal(productName);
-    expect(createdProduct.description).is.equal(productDescription)
-    expect(createdProduct.cost.toNumber()).is.equal(productCost.toNumber());
-    expect(createdProduct.sku).is.equal(productSku);
+    expect(createdProduct.description).is.equal(productDescription)    
     expect(createdProduct.data).is.equal(data);
 
-    const createdMintProductRef = await program.account.mintProductRef.fetch(mintProductRefPda);
-    expect(createdMintProductRef.bump).is.equal(mintProductRefPdaBump);
-    expect(createdMintProductRef.product).is.eql(storeProductPda);
 
     const store = await program.account.store.fetch(storePda);
     expect(store.productCount.toNumber()).is.equal(1);
 
-    const mintAccount = await spl_token.getMint(provider.connection, mintKeypair.publicKey,'confirmed', TOKEN_PROGRAM_ID);
-    expect(mintAccount.address).is.eql(mintKeypair.publicKey)
-    expect(mintAccount.decimals).is.equal(productMintDecimals);
-    expect(mintAccount.supply).is.equal(BigInt(0));
-    expect(mintAccount.freezeAuthority).is.eql(ownerKeypair.publicKey);
-    expect(mintAccount.mintAuthority).is.eql(ownerKeypair.publicKey);
-    expect(mintAccount.isInitialized).is.equal(true);    
+    //const mintAccount = await spl_token.getMint(provider.connection, storeProductMintPda,'confirmed', TOKEN_PROGRAM_ID);
+    //expect(mintAccount.address).is.eql(storeProductMintPda)
+    //expect(mintAccount.decimals).is.equal(productMintDecimals);
+    //expect(mintAccount.supply).is.equal(BigInt(0));
+    //expect(mintAccount.freezeAuthority).is.eql(storeProductMintPda);
+    //expect(mintAccount.mintAuthority).is.eql(storeProductMintPda);
+    //expect(mintAccount.isInitialized).is.equal(true);    
   });
 
   
   it("Update Store Product", async () => {
+    const updatedProductStatus = 0;
     const updatedProductName = productName + "-updated";
     const updatedProductDescription = productDescription + "-updated";
-    const updatedProductSku = productSku + "-updated";
-    const updatedProductCost = 200000;
-    const data = JSON.stringify({updated:true});
+    const updatedProductPrice = 200000;
+    const updatedProductInventory = 2;
+    const updatedProductData = JSON.stringify({updated:true});
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
-    .updateProduct(updatedProductName, updatedProductDescription, new BN(updatedProductCost), updatedProductSku, data)
+    .updateProduct(updatedProductStatus, new BN(updatedProductPrice), new BN(updatedProductInventory),
+        updatedProductName, updatedProductDescription, updatedProductData)
     .accounts({
-      product: storeProductPda,
-      owner: ownerKeypair.publicKey,      
+      product: storeProductPda, 
+      authority: creatorKeypair.publicKey,  
     })
     .transaction();
 
-    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [ownerKeypair]);
+    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [creatorKeypair],{commitment:'processed'});
 
     const updatedProduct = await program.account.product.fetch(storeProductPda);
     expect(updatedProduct.bump).is.equal(storeProductPdaBump);
-    expect(updatedProduct.productId).is.equal(storeProductId);
+    expect(updatedProduct.status).is.equal(updatedProductStatus);
+    expect(updatedProduct.creator).is.eql(creatorKeypair.publicKey);
+    expect(updatedProduct.authority).is.eql(creatorKeypair.publicKey);
+    expect(updatedProduct.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(updatedProduct.id).is.equal(storeProductId);
+    expect(updatedProduct.tag.toNumber()).is.equal(0); 
+    //expect(updatedProduct.mint).is.eql(storeProductMintPda);
+    expect(updatedProduct.payTo).is.eql(paytoKeypair.publicKey);
+    expect(updatedProduct.store).is.eql(storePda); 
+    expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
+    expect(updatedProduct.inventory.toNumber()).is.equal(updatedProductInventory);
+    expect(updatedProduct.name).is.equal(updatedProductName);
     expect(updatedProduct.description).is.equal(updatedProductDescription);
-    expect(updatedProduct.cost.toNumber()).is.equal(updatedProductCost);
-    expect(updatedProduct.sku).is.equal(updatedProductSku);
-    expect(updatedProduct.owner).is.eql(ownerKeypair.publicKey);
-    expect(updatedProduct.data).is.equal(data);
+    expect(updatedProduct.data).is.equal(updatedProductData);
   });
 
-
+*/
   it("Create Lone Product", async () => {    
-    const productMintDecimals = 3;
-    const mintKeypair = Keypair.generate();
-    const data="";
-
-    const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("product_mint"),
-      mintKeypair.publicKey.toBuffer()
-    ], program.programId);
-
-    const [mintProductRefPda, mintProductRefPdaBump] = PublicKey.findProgramAddressSync([
-      anchor.utils.bytes.utf8.encode("mint_product_ref"),
-      mintKeypair.publicKey.toBuffer()
-    ], program.programId);
+    //const productMintDecimals = 3;
+    const data = JSON.stringify({loneproduct:true});
 
     const tx = await program.methods
-    .createProduct(loneProductId, productMintDecimals, productName, productDescription, productCost, productSku, data)
+    .createProduct(loneProductId, productStatus, //productMintDecimals,
+     productPrice, productInventory, productName, productDescription, data)
     .accounts({
-      mint: mintKeypair.publicKey,
+      //mint: loneProductMintPda,
       product: loneProductPda,
-      productMint: productMintPda,
-      mintProductRef: mintProductRefPda,
-      owner: ownerKeypair.publicKey,
+      creator: creatorKeypair.publicKey,
+      authority: creatorKeypair.publicKey,
+      secondaryAuthority: creatorKeypair.publicKey,
+      payTo: paytoKeypair.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
-      twineProgram: program.programId,
     })
     .transaction();
    
-    //setting feepayer,recentblockhash and then partialsigning is being done here, because that's the way it has to be done by mobile/web app client
-    //because they have to use a separate wallet program for signing
-    tx.feePayer = ownerKeypair.publicKey;
-    tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-    tx.partialSign(mintKeypair)    
-    tx.partialSign(ownerKeypair); //this is where the wallet would be called to sign the transaction
-    
-    const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
-      tx.serialize({
-          requireAllSignatures: true,
-          verifySignatures: true,
-      }), {skipPreflight: true});
-
-    //console.log('txid: ', txid);
-    //const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);
-    //console.log('create_product response: ', response);
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
 
     const createdProduct = await program.account.product.fetch(loneProductPda);
     expect(createdProduct.bump).is.equal(loneProductPdaBump);
-    expect(createdProduct.productId).is.equal(loneProductId); 
-    expect(createdProduct.owner).is.eql(ownerKeypair.publicKey);
-    expect(createdProduct.store).is.equal(null); 
+    expect(createdProduct.status).is.equal(productStatus);
+    expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
+    expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
+    expect(createdProduct.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(createdProduct.id).is.equal(loneProductId); 
+    expect(createdProduct.tag.toNumber()).is.equal(0); 
+    //expect(createdProduct.mint).is.eql(loneProductMintPda);
+    expect(createdProduct.payTo).is.eql(paytoKeypair.publicKey);
+    expect(createdProduct.store).is.eql(null); 
+    expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
+    expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
     expect(createdProduct.name).is.equal(productName);
-    expect(createdProduct.description).is.equal(productDescription)
-    expect(createdProduct.cost.toNumber()).is.equal(productCost.toNumber());
-    expect(createdProduct.sku).is.equal(productSku);
+    expect(createdProduct.description).is.equal(productDescription)    
     expect(createdProduct.data).is.equal(data);
 
-    const createdMintProductRef = await program.account.mintProductRef.fetch(mintProductRefPda);
-    expect(createdMintProductRef.bump).is.equal(mintProductRefPdaBump);
-    expect(createdMintProductRef.product).is.eql(loneProductPda);
-
-    const store = await program.account.store.fetch(storePda);
-    expect(store.productCount.toNumber()).is.equal(1);
-
-    const mintAccount = await spl_token.getMint(provider.connection, mintKeypair.publicKey,'confirmed', TOKEN_PROGRAM_ID);
-    expect(mintAccount.address).is.eql(mintKeypair.publicKey)
-    expect(mintAccount.decimals).is.equal(productMintDecimals);
-    expect(mintAccount.supply).is.equal(BigInt(0));
-    expect(mintAccount.freezeAuthority).is.eql(ownerKeypair.publicKey);
-    expect(mintAccount.mintAuthority).is.eql(ownerKeypair.publicKey);
-    expect(mintAccount.isInitialized).is.equal(true);    
+    
+    //const mintAccount = await spl_token.getMint(provider.connection, loneProductMintPda,'confirmed', TOKEN_PROGRAM_ID);
+    //expect(mintAccount.address).is.eql(loneProductMintPda)
+    //expect(mintAccount.decimals).is.equal(productMintDecimals);
+    //expect(mintAccount.supply).is.equal(BigInt(0));
+    //expect(mintAccount.freezeAuthority).is.eql(loneProductMintPda);
+    //expect(mintAccount.mintAuthority).is.eql(loneProductMintPda);
+    //expect(mintAccount.isInitialized).is.equal(true);    
+    
   });
 
+
+  it("Buy Lone Product", async () => {
+    let buyForPubkey = creatorKeypair.publicKey;
+    //let buyForAta = await spl_token.getAssociatedTokenAddress(
+    //  loneProductMintPda,
+    //  buyForPubkey,
+    //);
+
+    const loneProduct = await program.account.product.fetch(loneProductPda);
+    const quantity = 1;
+    const nonce = generateRandomU16();
+    const [productSnapshotPda, productSnapshotPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("product_snapshot"),
+        loneProductPda.toBuffer(),
+        creatorKeypair.publicKey.toBuffer(),
+        Buffer.from(uIntToBytes(nonce,2,"setUint")),
+      ], program.programId);
+    const [purchaseTicketPda, purchaseTicketPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("purchase_ticket"), 
+        productSnapshotPda.toBuffer(),
+        creatorKeypair.publicKey.toBuffer(),
+        Buffer.from(uIntToBytes(nonce,2,"setUint")),
+      ], program.programId);
+
+    const transferToPurchaseTicketIx = anchor.web3.SystemProgram.transfer({
+      fromPubkey: creatorKeypair.publicKey,
+      toPubkey: purchaseTicketPda,
+      lamports: 20_000_000
+    });
+
+    const buyProductIx = await program.methods
+      .buyProduct(nonce, new BN(quantity), loneProduct.price)
+      .accounts({
+        //mint: loneProduct.mint,
+        product: loneProductPda,
+        productSnapshot: productSnapshotPda,
+        buyer: creatorKeypair.publicKey,
+        buyFor: creatorKeypair.publicKey,
+        payTo: loneProduct.payTo,
+        purchaseTicket: purchaseTicketPda,
+        clock: SYSVAR_CLOCK_PUBKEY,
+      })
+      .instruction();
+
+    const tx = new anchor.web3.Transaction()
+    .add(transferToPurchaseTicketIx)
+    .add(buyProductIx);
+
+    tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+    tx.feePayer = creatorKeypair.publicKey;  
+
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
+
+    console.log('getting snapshot')
+;    const productSnapshot = await program.account.productSnapshot.fetch(productSnapshotPda);
+    expect(productSnapshot.bump).is.equal(productSnapshotPdaBump);
+    expect(productSnapshot.nonce).is.equal(nonce);
+    //expect(productSnapshot.product.)
+
+    console.log('getting purchase ticket');
+    const purchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
+    expect(purchaseTicket.bump).is.equal(purchaseTicketPdaBump);
+    expect(purchaseTicket.nonce).is.equal(nonce);
+    expect(purchaseTicket.product).is.eql(loneProductPda);
+    expect(purchaseTicket.productSnapshot).is.eql(productSnapshotPda);
+    expect(purchaseTicket.buyer).is.eql(creatorKeypair.publicKey);
+    expect(purchaseTicket.payTo).is.eql(loneProduct.payTo);
+    expect(purchaseTicket.authority).is.eql(creatorKeypair.publicKey);
+    expect(purchaseTicket.redeemed).is.equal(false);
+    expect(purchaseTicket.nonce).is.equal(nonce);
+  
+    
+    //const mintAccount = await spl_token.getMint(provider.connection, loneProduct.mint,'confirmed', TOKEN_PROGRAM_ID);  
+    //expect(mintAccount.supply).is.equal(BigInt(quantity));
+    
+    //const buyForAccount = await spl_token.getAccount(provider.connection, buyForAta, 'confirmed', TOKEN_PROGRAM_ID);
+    //expect(buyForAccount.address).is.eql(buyForAta);
+    //expect(buyForAccount.amount).is.equal(BigInt(quantity));
+    //expect(buyForAccount.owner).is.eql(creatorKeypair.publicKey);
+    //expect(buyForAccount.mint).is.eql(loneProduct.mint);
+  });
+
+  /*
 
   it("Update Lone Product", async () => {
     const updatedProductName = productName + "-updated";
     const updatedProductDescription = productDescription + "-updated";
-    const updatedProductSku = productSku + "-updated";
-    const updatedProductCost = 200000;
+    const updatedProductPrice = 200000;
     const updatedData = JSON.stringify({updated: true});
+    const updatedStatus = 0;
+    const updatedInventory = 3;
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
-    .updateProduct(updatedProductName, updatedProductDescription, new BN(updatedProductCost), updatedProductSku, updatedData)
+    .updateProduct(updatedStatus, new BN(updatedProductPrice), new BN(updatedInventory), updatedProductName, updatedProductDescription, updatedData)
     .accounts({
       product: loneProductPda,
-      owner: ownerKeypair.publicKey,      
+      authority: creatorKeypair.publicKey,
     })
     .transaction();
 
-    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [ownerKeypair]);
+    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [creatorKeypair]);
 
     const updatedProduct = await program.account.product.fetch(loneProductPda);
     expect(updatedProduct.bump).is.equal(loneProductPdaBump);
-    expect(updatedProduct.productId).is.equal(loneProductId);
+    expect(updatedProduct.status).is.equal(updatedStatus);
+    expect(updatedProduct.creator).is.eql(creatorKeypair.publicKey);
+    expect(updatedProduct.authority).is.eql(creatorKeypair.publicKey);
+    expect(updatedProduct.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+    expect(updatedProduct.id).is.equal(loneProductId);
+    expect(updatedProduct.tag.toNumber()).is.equal(0); 
+    //expect(updatedProduct.mint).is.eql(loneProductMintPda);
+    expect(updatedProduct.payTo).is.eql(paytoKeypair.publicKey);
     expect(updatedProduct.store).is.equal(null); 
+    expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
+    expect(updatedProduct.inventory.toNumber()).is.equal(updatedInventory);
+    expect(updatedProduct.name).is.equal(updatedProductName);
     expect(updatedProduct.description).is.equal(updatedProductDescription);
-    expect(updatedProduct.cost.toNumber()).is.equal(updatedProductCost);
-    expect(updatedProduct.sku).is.equal(updatedProductSku);
-    expect(updatedProduct.owner).is.eql(ownerKeypair.publicKey);
     expect(updatedProduct.data).is.equal(updatedData);
   });
 
 
   describe("Mock Data", ()=>{
       
-    it("load stores", async ()=> {
+    const storeMap = new Map<string,number>();
 
-      for(let store of data.stores) {
-        const storeId = store.id;        
+    it("load stores", async ()=> {
+  
+      let loadedStores = 0;
+
+      for(let store of data.stores) {        
+        const storeId = generateRandomU16();
+        storeMap.set(store.id, storeId);
+
         const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
             [
-            anchor.utils.bytes.utf8.encode("store"),                                                
-            anchor.utils.bytes.utf8.encode(storeId)
+              anchor.utils.bytes.utf8.encode("store"),
+              creatorKeypair.publicKey.toBuffer(), 
+              Buffer.from(uIntToBytes(storeId,2,"setUint"))                                            
             ], program.programId);
 
         const existingStore = await program.account.store.fetchNullable(mockStorePda);
@@ -352,57 +542,66 @@ describe("twine", () => {
         const dataString = JSON.stringify(compressedStore);
         //console.log('dataString: ', dataString);
         const tx = await program.methods
-        .createStore(storeId, store.name, store.description, dataString)
+        .createStore(storeId, 1, store.name, store.description, dataString)
         .accounts({
             store: mockStorePda,
-            owner: ownerKeypair.publicKey,
+            creator: creatorKeypair.publicKey,
+            authority: creatorKeypair.publicKey,
+            secondaryAuthority: creatorKeypair.publicKey,
         })
         .transaction();
 
-        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);     
-        
+        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);     
+        loadedStores++;
+
         const createdStore = await program.account.store.fetch(mockStorePda);
-        expect(createdStore.storeId).is.equal(storeId);
+        expect(createdStore.bump).is.equal(mockStorePdaBump);
+        expect(createdStore.status).is.equal(1);
+        expect(createdStore.id).is.equal(storeId);
+        expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
+        expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
+        expect(createdStore.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+        expect(createdStore.tag.toNumber()).is.equal(0);
         expect(createdStore.name).is.equal(store.name);
-        expect(createdStore.description).is.equal(store.description);
-        expect(createdStore.data).is.equal(dataString);      
+        expect(createdStore.description).is.eql(store.description);
+        expect(createdStore.productCount.toNumber()).is.equal(0);  
+        expect(createdStore.data).is.equal(dataString); 
       }
 
+      expect(loadedStores).is.equal(data.stores.length);
     });
 
     it("load products", async ()=> {      
-      
+      let loadedProducts = 0;
+
       for(let product of data.products)
       {        
-        const productId = product.id;
-        const [productPda, productPdaBump] = PublicKey.findProgramAddressSync(
+        const mockProductId = generateRandomU32();        
+        const [mockProductPda, mockProductPdaBump] = PublicKey.findProgramAddressSync(
           [
-            anchor.utils.bytes.utf8.encode("product"),                                                
-            anchor.utils.bytes.utf8.encode(productId)
+            anchor.utils.bytes.utf8.encode("product"),
+            creatorKeypair.publicKey.toBuffer(),                                                   
+            Buffer.from(uIntToBytes(mockProductId,4,"setUint"))
           ], program.programId);
 
-        const existingProduct = program.account.product.fetchNullable(productPda);
-        if(existingProduct)
+        const existingProduct = await program.account.product.fetchNullable(mockProductPda);
+        if(existingProduct){
           continue;
+        }
 
-        const mintKeypair = Keypair.generate();
-        const storeId = product.storeId;
-        const productMintDecimals = product.decimals ?? 0;
+        //const mockProductMintKeypair = Keypair.generate();
+        const mockStoreId = storeMap.has(product.storeId) ? storeMap.get(product.storeId) : null;
+        //const productMintDecimals = product.decimals ?? 0;
         const productName = product.name;
         const productDescription = product.description;
         const productPrice = product.price ?? 0;
-        const productSku = product.sku ?? ""; 
+        const productInventory = product.inventory ?? 0;
 
-        const [productMintPda, productMintPdaBump] = PublicKey.findProgramAddressSync(
+        const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
           [
-            anchor.utils.bytes.utf8.encode("product_mint"),
-            mintKeypair.publicKey.toBuffer()
-          ], program.programId);
-    
-        const [mintProductRefPda, mintProductRefPdaBump] = PublicKey.findProgramAddressSync(
-          [
-            anchor.utils.bytes.utf8.encode("mint_product_ref"),
-            mintKeypair.publicKey.toBuffer()
+            anchor.utils.bytes.utf8.encode("store"),
+            creatorKeypair.publicKey.toBuffer(),                                              
+            Buffer.from(uIntToBytes(mockStoreId,2,"setUint"))
           ], program.programId);
        
         trimUndefined(product);
@@ -410,84 +609,86 @@ describe("twine", () => {
         const dataString = JSON.stringify(compressedProduct);       
         let tx = null;
 
-        if(storeId){
-          const [storePda, storePdaBump] = PublicKey.findProgramAddressSync(
-            [
-              anchor.utils.bytes.utf8.encode("store"),                                                
-              anchor.utils.bytes.utf8.encode(storeId)
-            ], program.programId);
-
-            console.log('product.storeId: ', product.storeId);
-            console.log('storeId: ', storeId);
-            console.log('pda: ', storePda.toBase58());
-
+        if(mockStoreId){
           tx = await program.methods
-                .createStoreProduct(productId, 
-                    productMintDecimals,
-                    productName, 
-                    productDescription, 
+                .createStoreProduct(mockProductId,
+                    1,
+                    //productMintDecimals,
                     new BN(productPrice), 
-                    productSku,
+                    new BN(productInventory),
+                    productName, 
+                    productDescription,
                     dataString)
                 .accounts({
-                    mint: mintKeypair.publicKey,
-                    product: productPda,
-                    productMint: productMintPda,
-                    mintProductRef: mintProductRefPda,
-                    store: storePda,
-                    owner: ownerKeypair.publicKey,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    twineProgram: program.programId,
+                  //mint: mockProductMintKeypair.publicKey,
+                  product: mockProductPda,
+                  store: mockStorePda,
+                  creator: creatorKeypair.publicKey,
+                  authority: creatorKeypair.publicKey,
+                  secondaryAuthority: creatorKeypair.publicKey,
+                  payTo: creatorKeypair.publicKey,
+                  tokenProgram: TOKEN_PROGRAM_ID,
                 })
                 .transaction();
         } 
         else {
           tx = await program.methods
-                .createProduct(productId, 
-                    productMintDecimals,
-                    productName, 
-                    productDescription, 
+                .createProduct(mockProductId, 
+                    1,
+                    //productMintDecimals,
                     new BN(productPrice), 
-                    productSku,
+                    new BN(productInventory),
+                    productName, 
+                    productDescription,        
                     dataString)
                 .accounts({
-                    mint: mintKeypair.publicKey,
-                    product: productPda,
-                    productMint: productMintPda,
-                    mintProductRef: mintProductRefPda,
-                    owner: ownerKeypair.publicKey,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    twineProgram: program.programId,
+                  //mint: mockProductMintKeypair.publicKey,
+                  product: mockProductPda,
+                  creator: creatorKeypair.publicKey,
+                  authority: creatorKeypair.publicKey,
+                  secondaryAuthority: creatorKeypair.publicKey,
+                  payTo: creatorKeypair.publicKey,
+                  tokenProgram: TOKEN_PROGRAM_ID,
                 })
                 .transaction();
         }
         
-        tx.feePayer = ownerKeypair.publicKey;
+
+        tx.feePayer = creatorKeypair.publicKey;
         tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-        tx.partialSign(mintKeypair)    
-        tx.partialSign(ownerKeypair);
+        tx.partialSign(creatorKeypair);
         
         const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
           tx.serialize({
               requireAllSignatures: true,
               verifySignatures: true,
-          }), {skipPreflight: true});
+              
+          }), {skipPreflight: true, commitment: 'confirmed'});
 
-        //console.log('tx: ', tx);
-        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ownerKeypair]);     
-        
-        const createdProduct = await program.account.store.fetch(productPda);
-        expect(createdProduct.bump).is.equal(productPdaBump);
-        expect(createdProduct.productId).is.equal(productId); 
-        expect(createdProduct.owner).is.eql(ownerKeypair.publicKey);
+        loadedProducts++;
+
+        const createdProduct = await program.account.product.fetch(mockProductPda);
+        expect(createdProduct.bump).is.equal(mockProductPdaBump);
+        expect(createdProduct.status).is.equal(1);
+        expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
+        expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
+        expect(createdProduct.secondaryAuthority).is.eql(creatorKeypair.publicKey);
+        expect(createdProduct.id).is.equal(mockProductId); 
+        expect(createdProduct.tag.toNumber()).is.equal(0); 
+        //expect(createdProduct.mint).is.eql(mockProductMintKeypair.publicKey);
+        expect(createdProduct.payTo).is.eql(creatorKeypair.publicKey);
+        expect(createdProduct.store).is.eql(mockStoreId ? mockStorePda : null); 
+        expect(createdProduct.price.toNumber()).is.equal(productPrice);
+        expect(createdProduct.inventory.toNumber()).is.equal(productInventory);
         expect(createdProduct.name).is.equal(productName);
-        expect(createdProduct.description).is.equal(productDescription)
-        expect(createdProduct.cost.toNumber()).is.equal(productPrice);
-        expect(createdProduct.sku).is.equal(productSku);
-        expect(createdProduct.data).is.equal(dataString);     
+        expect(createdProduct.description).is.equal(productDescription);
+        expect(createdProduct.data).is.equal(dataString);
       }
+
+      expect(loadedProducts).is.equal(data.products.length);
     }); //load products
 
   }); //mock data
-
+  */  
+  
 });

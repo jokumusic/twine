@@ -2,13 +2,13 @@
 seeds = false
 skip-lint = false
 [programs.localnet]
-twine = "DyQg7GpUX5Ev62eHk7j6qAUka2eMJWiedjE7YPfN9yRZ"
+twine = "HUHWYMoHQEsZtDEPJNxPXYWf1yMpUWGFKadD2V8QneAM"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "testnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

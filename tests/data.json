@@ -81,44 +81,44 @@
 	],
 	"products": [
 		{
-			"id": "7baFPRkrDHf8",
 			"storeId": "m1fPQuKFCUM4",
 			"img": "https://i.etsystatic.com/25894060/r/il/749abc/3333286358/il_794xN.3333286358_o0jb.jpg",
 			"name": "Solana Baseball Cap",
 			"description": "SOL|Cryptocurrency HAT|Investor Gift - Adult Unisex Size",
-			"price": 12.58,
+			"inventory": 1000,
+			"price": 25,
 			"rating": 5
 		},
 		{
-			"id": "puDSTVBQ6Jrm",
 			"img": "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
 			"name": "Katie Perry - I Kissed A Girl",
 			"description": "Purchase song from official Katy Perry Store",
-			"price": 1.2,
+			"inventory": 2000000,
+			"price": 1,
 			"rating": 3
 		},
 		{
-			"id": "ldBlxH9UejDW",
 			"img": "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
 			"name": "A Carrot",
 			"description": "Buy this carrot!",
-			"price": 3.5,
+			"inventory": 1,
+			"price": 20,
 			"rating": 5
 		},
 		{
-			"id": "rzP9CuRkUPTB",
 			"img": "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
 			"name": "Solana Breakpoint 2022 Ticket",
 			"description": "This ticket is good for entry at Solana Breakpoint 2022!",
+			"inventory": 10000,
 			"price": 1000
 		},
 		{
-			"id": "Y7d2xzTn53VG",
 			"storeId": "dCdFiBvQ5YUb",
 			"img": "https://images.albertsons-media.com/is/image/ABS/123050070?$ecom-pdp-desktop$&defaultImage=Not_Available",
 			"name": "SPAM Classic 25% Less Sodium - 12 Oz",
 			"description": "The real stuff just tastes better...",
-			"price": 3.5,
+			"inventory": 250,
+			"price": 4,
 			"rating": 5
 		}
 	]

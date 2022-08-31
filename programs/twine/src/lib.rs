@@ -1,29 +1,69 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token::{Token, TokenAccount, Mint};
+use anchor_lang::{prelude::*};
+use anchor_spl::{
+    token::{ Token }
+};
 
-declare_id!("DyQg7GpUX5Ev62eHk7j6qAUka2eMJWiedjE7YPfN9yRZ");
 
-const STORE_SEED_BYTES : &[u8] ="store".as_bytes();
-const PRODUCT_SEED_BYTES : &[u8] = "product".as_bytes();
-const PRODUCT_MINT_SEED_BYTES : &[u8] = "product_mint".as_bytes();
-const MINT_PRODUCT_REF_SEED_BYTES : &[u8] = "mint_product_ref".as_bytes();
+declare_id!("HUHWYMoHQEsZtDEPJNxPXYWf1yMpUWGFKadD2V8QneAM");
+
+const PROGRAM_VERSION: u8 = 0;
+const STORE_VERSION : u8 = 0;
+const PRODUCT_VERSION: u8 = 0;
+const PRODUCT_SNAPSHOT_VERSION: u8 = 0;
+const PURCHASE_TICKET_VERSION: u8 = 0;
+
+
+const PROGRAM_METADATA_BYTES: &[u8] = b"program_metadata";
+const STORE_SEED_BYTES : &[u8] = b"store";
+const PRODUCT_SEED_BYTES : &[u8] = b"product";
+const PRODUCT_SNAPSHOT_BYTES: &[u8] = b"product_snapshot";
+const PURCHASE_TICKET_BYTES : &[u8] = b"purchase_ticket";
+//const PRODUCT_MINT_BYTES : &[u8] = b"mint";
+
 
 #[program]
 pub mod twine {
+
     use super::*;
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        let program_metadata = &mut ctx.accounts.program_metadata;
+        if program_metadata.initialized {
+            return Err(ErrorCode::AlreadyInitialized.into());
+        }
+
+        program_metadata.bump = *ctx.bumps.get("program_metadata").unwrap();
+        program_metadata.version = PROGRAM_VERSION;
+        program_metadata.initialized = true;
+        program_metadata.creator = ctx.accounts.creator.key();
+        program_metadata.authority = ctx.accounts.authority.key();
+        program_metadata.secondary_authority = ctx.accounts.secondary_authority.key();
+        program_metadata.fee_account = ctx.accounts.fee_account.key();
+
+        Ok(())
+    }
     
-    pub fn create_store(ctx: Context<CreateStore>, _store_id: String, name: String, description: String, 
-        data: String) -> Result<()> {
-        msg!("data len is {}", &data.len().to_string());
-        
+    pub fn create_store(ctx: Context<CreateStore>, id: u16, status: u8, name: String, description: String, data: String) -> Result<()> {    
         let store = &mut ctx.accounts.store;
 
+        if name.len() > STORE_NAME_SIZE {
+            return Err(ErrorCode::NameIsTooLong.into());
+        }
+
+        if description.len() > STORE_DESCRIPTION_SIZE {
+            return Err(ErrorCode::DescriptionIsTooLong.into());
+        }
+        
         store.bump = *ctx.bumps.get("store").unwrap();
-        store.store_id =_store_id;
-        store.owner = ctx.accounts.owner.key();
+        store.version = STORE_VERSION;
+        store.status = status;
+        store.creator =  ctx.accounts.creator.key();
+        store.authority = ctx.accounts.authority.key(); 
+        store.secondary_authority = ctx.accounts.secondary_authority.key();       
+        store.id = id;
+        store.tag = 0;
+        store.product_count = 0;
         store.name = name;
         store.description = description;
-        store.product_count = 0;
         store.data = data;
 
         Ok(())
@@ -32,6 +72,15 @@ pub mod twine {
 
     pub fn update_store(ctx: Context<UpdateStore>, name: String, description: String, data: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
+
+        if name.len() > STORE_NAME_SIZE {
+            return Err(ErrorCode::NameIsTooLong.into());
+        }
+
+        if description.len() > STORE_DESCRIPTION_SIZE {
+            return Err(ErrorCode::DescriptionIsTooLong.into());
+        }
+
         store.name = name;
         store.description = description;
         store.data = data;
@@ -40,60 +89,178 @@ pub mod twine {
     }
 
 
-    pub fn create_product(ctx: Context<CreateProduct>, _product_id: String, _decimals: u8,
-        name: String, description: String, cost: u64, sku: String, data: String) -> Result<()> {
-        let owner = &ctx.accounts.owner;
-        let product = &mut ctx.accounts.product;    
-        let mint_product_ref = &mut ctx.accounts.mint_product_ref;
+    pub fn create_product(ctx: Context<CreateProduct>, id: u32, status: u8, //_mint_decimals: u8,
+        price: u64, inventory: u64, name: String, description: String, data: String) -> Result<()> {        
+        let product = &mut ctx.accounts.product;
+
+        if name.len() > PRODUCT_NAME_SIZE {
+            return Err(ErrorCode::NameIsTooLong.into());
+        }
+
+        if description.len() > PRODUCT_DESCRIPTION_SIZE {
+            return Err(ErrorCode::DescriptionIsTooLong.into());
+        }
 
         product.bump = *ctx.bumps.get("product").unwrap();
-        product.product_id = _product_id;
-        product.owner = owner.key();
+        product.version = PRODUCT_VERSION;
+        product.status = status;
+        product.creator = ctx.accounts.creator.key();
+        product.authority = ctx.accounts.authority.key();
+        product.secondary_authority = ctx.accounts.secondary_authority.key();
+        product.id = id;
+        product.tag = 0;
+        //product.mint = ctx.accounts.mint.key();
+        product.pay_to = ctx.accounts.pay_to.key();
         product.store = None;
+        product.price = price;
+        product.inventory = inventory;
         product.name = name;
         product.description = description;
-        product.cost = cost;
-        product.sku = sku;
         product.data = data;
-
-        mint_product_ref.bump = *ctx.bumps.get("mint_product_ref").unwrap();
-        mint_product_ref.product = product.key();
 
         Ok(())
     }
 
-    pub fn create_store_product(ctx: Context<CreateStoreProduct>, _product_id: String, _decimals: u8,
-                name: String, description: String, cost: u64, sku: String, data: String) -> Result<()> {
-        let owner = &ctx.accounts.owner;
+    pub fn create_store_product(ctx: Context<CreateStoreProduct>, id: u32, status: u8, //_mint_decimals: u8,
+        price: u64, inventory: u64, name: String, description: String, data: String) -> Result<()> {
+        
         let store = &mut ctx.accounts.store;
-        let product = &mut ctx.accounts.product;    
-        let mint_product_ref = &mut ctx.accounts.mint_product_ref;
+        let product = &mut ctx.accounts.product;
+
+        if name.len() > PRODUCT_NAME_SIZE {
+            return Err(ErrorCode::NameIsTooLong.into());
+        }
+
+        if description.len() > PRODUCT_DESCRIPTION_SIZE {
+            return Err(ErrorCode::DescriptionIsTooLong.into());
+        }
 
         product.bump = *ctx.bumps.get("product").unwrap();
-        product.product_id = _product_id;
-        product.owner = owner.key();
+        product.version = PRODUCT_VERSION;
+        product.status = status;
+        product.creator = ctx.accounts.creator.key();
+        product.authority = ctx.accounts.authority.key();
+        product.secondary_authority = ctx.accounts.secondary_authority.key();
+        product.id = id;
+        product.tag = 0;
+        //product.mint = ctx.accounts.mint.key();
+        product.pay_to = ctx.accounts.pay_to.key();
         product.store = Some(store.key());
+        product.price = price;
+        product.inventory = inventory;
         product.name = name;
         product.description = description;
-        product.cost = cost;
-        product.sku = sku;
         product.data = data;
-        
-        mint_product_ref.bump = *ctx.bumps.get("mint_product_ref").unwrap();
-        mint_product_ref.product = product.key();
 
         store.product_count += 1;
 
         Ok(())
     }
 
-    pub fn update_product(ctx: Context<UpdateProduct>, name: String, description: String, cost: u64, sku: String, data: String) -> Result<()> {
+    pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, name: String, description: String, data: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
+
+        product.status = status;
+        product.price = price;
+        product.inventory = inventory;
         product.name = name;
         product.description = description;
-        product.cost = cost;
-        product.sku = sku;
         product.data = data;
+
+        Ok(())
+    }    
+
+    //keep this simple for now, but look at including snapshots on purchases
+    pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16,
+         quantity: u64, agreed_price: u64) -> Result<()>{
+        
+        let buyer = &mut ctx.accounts.buyer;
+        let product = &mut ctx.accounts.product;
+        let product_snapshot = &mut ctx.accounts.product_snapshot;
+        let purchase_ticket = &mut ctx.accounts.purchase_ticket;
+        let pay_to = &ctx.accounts.pay_to;
+        let purchase_ticket_lamports = **purchase_ticket.to_account_info().try_borrow_lamports()?;
+        let clock = Clock::get()?;
+
+        if product.inventory < quantity {
+            return Err(ErrorCode::NotEnoughInventory.into());
+        }
+
+        if product.price > agreed_price {
+            return Err(ErrorCode::PriceIsGreaterThanPayment.into());
+        }
+
+        msg!("purchase ticket has {} lamports and price is {}", purchase_ticket_lamports, product.price);
+        if product.price > purchase_ticket_lamports {
+            return Err(ErrorCode::InsufficientFunds.into());
+        }
+
+        require_keys_eq!(pay_to.key(), product.pay_to.key());
+
+        product_snapshot.bump =  *ctx.bumps.get("product_snapshot").unwrap();
+        product_snapshot.version = PRODUCT_SNAPSHOT_VERSION;
+        product_snapshot.slot = clock.slot;
+        product_snapshot.timestamp = clock.unix_timestamp;
+        //product_snapshot.snapshot =  Box::new(product.clone()); //snapshot the product for future reference        
+        product_snapshot.nonce = _nonce;
+
+        purchase_ticket.bump = *ctx.bumps.get("purchase_ticket").unwrap();
+        purchase_ticket.version = PURCHASE_TICKET_VERSION;
+        purchase_ticket.slot = clock.slot;
+        purchase_ticket.timestamp = clock.unix_timestamp;
+        purchase_ticket.product = product.key();
+        purchase_ticket.product_snapshot = product_snapshot.key();
+        purchase_ticket.buyer = buyer.key();
+        purchase_ticket.pay_to = pay_to.key();
+        purchase_ticket.authority = ctx.accounts.buy_for.key();
+        purchase_ticket.redeemed = false;
+        purchase_ticket.nonce = _nonce;
+        
+        msg!("purchase_ticket lamports: {}, pay_to lamports: {}", 
+            **purchase_ticket.to_account_info().try_borrow_lamports()?,
+            **pay_to.to_account_info().try_borrow_lamports()?);
+
+            let from = &mut purchase_ticket.to_account_info();
+            let post_from = from
+                .lamports()
+                .checked_sub(product.price)
+                .ok_or(ErrorCode::UnableToDeductFromBuyerAccount)?;
+            let post_to = pay_to
+                .lamports()
+                .checked_add(product.price)
+                .ok_or(ErrorCode::UnableToAddToPayToAccount)?;
+            
+            **from.try_borrow_mut_lamports().unwrap() = post_from;
+            **pay_to.try_borrow_mut_lamports().unwrap() = post_to;
+
+
+        msg!("remaining purchase_ticket lamports: {}, pay_to lamports: {}", 
+            **purchase_ticket.to_account_info().try_borrow_lamports()?,
+            **pay_to.to_account_info().try_borrow_lamports()?);
+    
+        /*
+        let token_program = ctx.accounts.token_program.to_account_info();
+        let mint_to_accounts = MintTo {
+            mint: ctx.accounts.mint.to_account_info(),
+            to: ctx.accounts.buy_for.to_account_info(),
+            authority: ctx.accounts.mint.to_account_info(),
+        };
+    
+        let mint_bump = *ctx.bumps.get("mint").unwrap();
+
+        mint_to(
+            CpiContext::new_with_signer(
+                token_program, 
+                mint_to_accounts, 
+                &[&[
+                    PRODUCT_MINT_BYTES,
+                    product.key().as_ref(),
+                    &[mint_bump]
+                ]]
+            ), 
+            quantity
+        )?;
+        */
 
         Ok(())
     }
@@ -101,18 +268,64 @@ pub mod twine {
 }
 
 
+
 #[derive(Accounts)]
-#[instruction(_store_id: String, name: String, description: String, data: String)]
+pub struct Initialize<'info> {
+    #[account(init,
+        payer = creator,
+        space = 8 + PROGRAM_METADATA_SIZE,
+        seeds = [PROGRAM_METADATA_BYTES, creator.key().as_ref()],
+        bump)]
+    pub program_metadata: Account<'info, ProgramMetadata>,
+
+    #[account(mut)]
+    pub creator: Signer<'info>,
+
+    /// CHECK:
+    pub authority: UncheckedAccount<'info>,
+    /// CHECK:
+    pub secondary_authority: UncheckedAccount<'info>,
+    /// CHECK:
+    pub fee_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateProgramMetadata<'info> {
+    #[account(
+        mut,
+        constraint= program_metadata.is_authorized(&authority.key),
+        seeds= [PROGRAM_METADATA_BYTES, program_metadata.creator.key().as_ref()],
+        bump= program_metadata.bump)]
+    pub program_metadata: Account<'info, ProgramMetadata>,
+    
+    #[account(mut,
+        constraint = program_metadata.is_authorized(&authority.key)
+    )]
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(id: u16, status: u8, name: String, description: String, data: String)]
 pub struct CreateStore<'info> {
     #[account(init,
-        payer=owner,
+        payer=creator,
         space=8 + STORE_SIZE + data.len(),
-        seeds=[STORE_SEED_BYTES, _store_id.as_bytes()],
+        seeds=[STORE_SEED_BYTES, creator.key().as_ref(), &id.to_be_bytes()],
         bump)]
     pub store: Box<Account<'info, Store>>,
 
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub creator: Signer<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub authority: AccountInfo<'info>,
+     
+    /// CHECK: doesn't much need validation
+     #[account(owner=system_program.key())]
+    pub secondary_authority: AccountInfo<'info>,
+    
     pub system_program: Program<'info, System>,
 }
 
@@ -120,179 +333,303 @@ pub struct CreateStore<'info> {
 #[derive(Accounts)]
 #[instruction(name: String, description: String, data: String)]
 pub struct UpdateStore<'info> {
-    #[account(mut, 
-        has_one=owner,
+    #[account(mut,
+        constraint = store.is_authorized(&authority.key),
         realloc = 8 + STORE_SIZE + data.len(),
-        realloc::payer = owner,
+        realloc::payer = authority,
         realloc::zero = true,
-        seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
+        seeds=[STORE_SEED_BYTES, store.creator.key().as_ref(), &store.id.to_be_bytes()],
         bump = store.bump)]   
     pub store: Box<Account<'info, Store>>,
 
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 //consider using metaplex for this.
 #[derive(Accounts)]
-#[instruction(_product_id: String, _decimals: u8, name: String, description: String, cost: u64, sku: String, data: String)]
+#[instruction(id: u32, status: u8, //_mint_decimals: u8,
+    price: u64, inventory: u64, name: String, description: String, data: String)]
 pub struct CreateStoreProduct<'info> {
-
+/*
     #[account(
         init,
-        payer=owner,
-        mint::decimals=_decimals,
-        mint::authority=owner,
-        mint::freeze_authority = owner,
+        payer=creator,
+        seeds=[PRODUCT_MINT_BYTES, product.key().as_ref()],
+        bump,
+        mint::decimals=_mint_decimals,
+        mint::authority=mint, //dont give the owner this, or they could mint tokens without going through this program for validation
+        mint::freeze_authority=mint,
     )]
     pub mint: Account<'info, Mint>, //mint account for this product. The owner mints tokens to the product_mint account for this program to use
-  
+  */
     #[account(init,
-        payer=owner,
+        payer=creator,
         space=8 + PRODUCT_SIZE + data.len(), 
-        seeds=[PRODUCT_SEED_BYTES, _product_id.as_bytes()], 
+        seeds=[PRODUCT_SEED_BYTES, creator.key().as_ref(), &id.to_be_bytes()], 
         bump)]
     pub product: Box<Account<'info, Product>>,
 
-    #[account(init,
-        payer=owner,
-        seeds=[PRODUCT_MINT_SEED_BYTES, mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = twine_program, //this program will be transferring tokens out of this account
-    )]
-    pub product_mint: Account<'info, TokenAccount>,
-  
-    //for an issued token, this account can be derived, 
-    //then the contained product pubkey gives the product account address.
-      #[account(init,
-        payer=owner,
-        space=8+MINT_PRODUCT_REF_SIZE,
-        seeds=[MINT_PRODUCT_REF_SEED_BYTES, mint.key().as_ref()], 
-        bump)]
-    pub mint_product_ref: Account<'info, MintProductRef>,
-
-    #[account(mut @ ErrorCode::NotMutable,
-        has_one=owner @ ErrorCode::IncorrectOwner, 
-        seeds=[STORE_SEED_BYTES, store.store_id.as_bytes()],
+    #[account(mut,
+        constraint = store.is_authorized(&creator.key),
+        seeds=[STORE_SEED_BYTES, store.creator.key().as_ref(), &store.id.to_be_bytes()],
         bump=store.bump)]
     pub store: Box<Account<'info, Store>>,
   
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub creator: Signer<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub authority: AccountInfo<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub secondary_authority: AccountInfo<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub pay_to: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
-    pub twine_program: Program<'info, crate::program::Twine>,
 }
 
 #[derive(Accounts)]
-#[instruction(_product_id: String, _decimals: u8, name: String, description: String, cost: u64, sku: String, data: String )]
+#[instruction(id: u32, status: u8, //_mint_decimals: u8,
+    price: u64, inventory: u64, name: String, description: String, data: String)]
 pub struct CreateProduct<'info> {
-
+/*
     #[account(
         init,
-        payer=owner,
-        mint::decimals=_decimals,
-        mint::authority=owner,
-        mint::freeze_authority = owner,
+        payer=creator,
+        seeds=[PRODUCT_MINT_BYTES, product.key().as_ref()],
+        bump,
+        mint::decimals=_mint_decimals,
+        mint::authority=mint, //dont give the owner this, or they could mint tokens without going through this program for validation
+        mint::freeze_authority=mint,
     )]
     pub mint: Account<'info, Mint>, //mint account for this product. The owner mints tokens to the product_mint account for this program to use
-  
+ */ 
     #[account(init,
-        payer=owner,
-        space=8 +PRODUCT_SIZE + data.len(), 
-        seeds=[PRODUCT_SEED_BYTES, _product_id.as_bytes()], 
+        payer=creator,
+        space=8 + PRODUCT_SIZE + data.len(), 
+        seeds=[PRODUCT_SEED_BYTES, creator.key().as_ref(), &id.to_be_bytes()], 
         bump)]
     pub product: Box<Account<'info, Product>>,
-
-    #[account(init,
-        payer=owner,
-        seeds=[PRODUCT_MINT_SEED_BYTES, mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = twine_program, //this program will be transferring tokens out of this account
-    )]
-    pub product_mint: Account<'info, TokenAccount>,
-  
-    //for an issued token, this account can be derived, 
-    //then the contained product pubkey gives the product account address.
-      #[account(init,
-        payer=owner,
-        space=8+MINT_PRODUCT_REF_SIZE,
-        seeds=[MINT_PRODUCT_REF_SEED_BYTES, mint.key().as_ref()], 
-        bump)]
-    pub mint_product_ref: Account<'info, MintProductRef>,
   
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub creator: Signer<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub authority: AccountInfo<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub secondary_authority: AccountInfo<'info>,
+
+    /// CHECK: doesn't much need validation
+    #[account(owner=system_program.key())]
+    pub pay_to: AccountInfo<'info>,
+
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
-    pub twine_program: Program<'info, crate::program::Twine>,
 }
 
 #[derive(Accounts)]
-#[instruction(name: String, description: String, cost: u64, sku: String, data: String)]
+#[instruction(status: u8, price: u64, inventory: u64, name: String, description: String, data: String)]
 pub struct UpdateProduct<'info> {
-    #[account(mut @ ErrorCode::NotMutable,
+    #[account(mut,
+        constraint = product.is_authorized(&authority.key),
         realloc = 8 + PRODUCT_SIZE + data.len(),
-        realloc::payer = owner,
+        realloc::payer = authority,
         realloc::zero = true,
-        has_one=owner @ ErrorCode::IncorrectOwner,
-        seeds=[PRODUCT_SEED_BYTES, product.product_id.as_bytes()], 
+        has_one=authority,
+        seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()],  
         bump = product.bump
     )]
     pub product: Box<Account<'info, Product>>,
 
     #[account(mut)]
-    pub owner: Signer<'info>,
+    pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 
+#[derive(Accounts)]
+#[instruction(_nonce: u16)]
+pub struct BuyProduct<'info> {
+    /*
+    #[account(
+        mut,
+        seeds=[PRODUCT_MINT_BYTES, product.key().as_ref()],
+        bump,
+        address=product.mint.key()
+    )]
+    pub mint: Account<'info, Mint>,
+    */
 
-pub const STORE_SIZE: usize = 1 + 32 + 32 + 8 + (4+100) + (4+200) + 4;
+    #[account(
+        seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()], 
+        bump=product.bump
+    )]
+    pub product: Box<Account<'info, Product>>,
+    
+    #[account(
+        init,
+        payer = buyer,
+        space = 8 + PRODUCT_SNAPSHOT_SIZE + product.data.len(),
+        seeds = [PRODUCT_SNAPSHOT_BYTES, product.key().as_ref(), buyer.key().as_ref(), &_nonce.to_be_bytes()],
+        bump
+    )]
+    pub product_snapshot: Account<'info, ProductSnapshot>,
+
+    #[account(
+        init,
+        payer = buyer,
+        space = 8 + PURCHASE_TICKET_SIZE,
+        //make nonce part of the seed, because in the future a new snapshot will only be created when a product changes
+        seeds = [PURCHASE_TICKET_BYTES, product_snapshot.key().as_ref(), buyer.key().as_ref(), &_nonce.to_be_bytes()], 
+        bump
+    )]
+    pub purchase_ticket: Account<'info, PurchaseTicket>,
+
+    /// CHECK: doesn't much need validation
+    #[account(
+        mut,
+        constraint=pay_to.key() == product.pay_to.key())
+    ]
+    pub pay_to: AccountInfo<'info>, //validate pay_to == product.pay_to
+    
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+
+    //#[account(
+        //init_if_needed,
+        //payer = buyer,
+        //associated_token::mint = mint,
+        //associated_token::authority = buyer,
+
+    /// CHECK: doesn't much need validation  
+    #[account(owner=system_program.key())] 
+    pub buy_for: AccountInfo<'info>,  //, TokenAccount>,
+
+    pub system_program: Program<'info, System>,
+    //pub token_program: Program<'info, Token>,
+    //pub associated_token_program: Program<'info, AssociatedToken>,
+    //pub rent: Sysvar<'info, Rent>,
+    pub clock: Sysvar<'info, Clock>,
+}
+
+
+const PROGRAM_METADATA_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 +32;
+#[account]
+pub struct ProgramMetadata {
+    pub bump: u8, //1;
+    pub initialized: bool, //1;
+    pub version: u8, //1;
+    pub creator: Pubkey, //32;
+    pub authority: Pubkey, //32;
+    pub secondary_authority: Pubkey, //32;
+    pub fee_account: Pubkey, //32;
+}
+
+
+pub const STORE_NAME_SIZE: usize = 4+100;
+pub const STORE_DESCRIPTION_SIZE: usize = 4+200;
+pub const STORE_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 2 + 8 + 8 + STORE_NAME_SIZE + STORE_DESCRIPTION_SIZE + 4;
+
 #[account]
 pub struct Store{
-    pub bump: u8, //1; bump used for this PDA    
-    pub owner: Pubkey, //32; current owner
-    pub product_count: u64, //8; tracks product count.    
-    pub name: String, //4+100; store name
-    pub description: String, //4+200; store description
-    pub store_id: String, //32;
-    pub data: String,//4+data bytes determined at create time
+    pub bump: u8, //1; bump used for this PDA
+    pub version: u8, //1; used for versioning schema, etc... to identify how to serialize/deserialize changes that may occur in the future
+    pub status: u8, //1; can be used for various status: active, inactive, etc... better than a just an active/inactive boolean
+    pub creator: Pubkey, //32; used as part of PDA seed to make it harder for spamming store creation
+    pub authority: Pubkey, //32; authorized to make changes
+    pub secondary_authority: Pubkey, //32; burner wallet or delegation...
+    pub id: u16, //2; unique store id used as part of the PDA seed 
+    pub tag: u64, //8; used for misc. tagging for simplifying queries. bitmasking maybe?
+    pub product_count: u64, //8; tracks product count.
+    pub name: String, //4+100; eventually used for indexing and querying
+    pub description: String, //4+200; eventually used for indexing and querying    
+    pub data: String, //4+ whatever size they pay for
     
+    /* UNDECIDED STUFF */
+    //pub category: u64, //64; bitwise AND masked identifier  
     //pub verified_by: Option<Pubkey>, //1 + 32; If verified, verified by who? store this outside this account
     //pub rating: u8, //8; current rating; store this outside of the account
+    //pub version: u8, //1; version changes in data structure to provide decision making on serialization/deserialization
 }
 
 
-pub const PRODUCT_SIZE: usize = 1 + 32 + 32 + (1+32) +  8 + (4+100) + (4+200) + (4+25) + 4;
+
+//pub const PRODUCT_SKU_SIZE: usize = 4+25;
+pub const PRODUCT_NAME_SIZE: usize = 4+100;
+pub const PRODUCT_DESCRIPTION_SIZE: usize = 4+200;
+pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 32 + 32 + (1+32) + 8 + 8 +  PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
+
 #[account]
 pub struct Product{
-    pub bump: u8, //1;
-    pub owner: Pubkey, //32; address allowed to make changes
-    pub store: Option<Pubkey>, //1+32; address of store PDA
-    pub cost: u64, //8;
+    pub bump: u8, //1; bump used for this PDA
+    pub version: u8, //1; used for versioning schema, etc... to identify how to serialize/deserialize changes that may occur in the future
+    pub status: u8, //1; can be used for various status: active, inactive, etc... better than a just an active/inactive boolean
+    pub creator: Pubkey, //32; used as part of PDA seed to make it harder for spamming store creation
+    pub authority: Pubkey, //32; authorized to make changes
+    pub secondary_authority: Pubkey, //32; burner wallet or delegation...
+    pub id: u32, //4; unique store id used as part of the PDA seed 
+    pub tag: u64, //8; used for misc. tagging for simplifying queries. bitmasking maybe?    
+
+    pub usable_snapshot: Option<Pubkey>, //1+32; set to None on product changes. On buys, if it's none, take a snapshot, otherwise use the existing snapshot
+    //pub mint: Pubkey, //32; used to mint a product token to the buyer
+    pub pay_to: Pubkey, //32; where payments should be sent. can be different than the authority
+    pub store: Option<Pubkey>, //1+32; address of store PDA. maybe set to default Pubkey and save a byte?
+    pub price: u64, //8; price of product. needs to be stable, but stablecoins can die, so most likely lamports since they'll be around as long as Solana is    
+    pub inventory: u64, //8;
     pub name: String, //4+100; product name
-    pub description: String, //4+200; product description
-    pub sku: String, //4+25; This gives the ability to relate the product to a sku in some catalog - not used natively
-    pub product_id: String, //32;
-    pub data: String, //4+;
-    //pub category: u64, //64; bitwise AND masked identifier    
-    //pub verified_by: Option<Pubkey>, //1 + 8; store this outside of this account    
-    //pub rating: u8, //8; current rating; store this outside of the account
+    pub description: String, //4+200; product description  
+    pub data: String, //4+ whatever size they pay for
+
+    /* UNDECIDED STUFF */
+    //pub sku: String, //4+25; This gives the ability to relate the product to a sku in some catalog - not used natively. most won't have this, store it in another account if needed
 }
 
-//This will be used to look up a product by the mint
-pub const MINT_PRODUCT_REF_SIZE: usize = 1 + 32;
+///help protect the seller and buyer from product changes
+/// make sure to update sizes and fields as product changes. maybe just serialize and compress the whole thing?
+/// it's more searchable when not compressed
+
+const PRODUCT_NONCE_SIZE: usize = 2;
+const PRODUCT_SNAPSHOT_SIZE: usize = 1 + 1 + 8 + 8 + PRODUCT_NONCE_SIZE + 4;
 #[account]
-pub struct MintProductRef{
+pub struct ProductSnapshot {
     pub bump: u8, //1;
-    pub product: Pubkey, //32; product account
+    pub version: u8, //1;
+    pub slot: u64, //8;
+    pub timestamp: i64, //8; unixtimestamp
+    pub nonce: u16, //2; 
+    //pub snapshot: Box<Product>, //4 + size of product
 }
+
+const PURCHASE_TICKET_NONCE_SIZE: usize = 2;
+const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 1 + PURCHASE_TICKET_NONCE_SIZE;
+#[account]
+pub struct PurchaseTicket {
+    pub bump: u8, //1;
+    pub version: u8, //1; used for versioning schema, etc... to identify how to serialize/deserialize changes that may occur in the future
+    pub slot: u64, //8;
+    pub timestamp: i64, //8; unixtimestamp
+    pub product: Pubkey, //32;
+    pub product_snapshot: Pubkey, //32;
+    pub buyer: Pubkey, //32;
+    pub pay_to: Pubkey, //32;
+    pub authority: Pubkey, //32;    
+    pub redeemed: bool, //1;
+    pub nonce: u16, //2;
+}
+
 
 /// Used as a bitwise mask for the product category
 /// this isn't a scalable way to store all the product categories - revisit this
@@ -321,16 +658,54 @@ pub enum ProductType {
 
 #[error_code]
 pub enum ErrorCode {
+    #[msg("AlreadyInitialized")]
+    AlreadyInitialized,
     #[msg("PublicKeyMismatch")]
     PublicKeyMismatch,
     #[msg("InvalidMintAuthority")]
     InvalidMintAuthority,
     #[msg("UninitializedAccount")]
     UninitializedAccount,
-    #[msg("IncorrectOwner")]
-    IncorrectOwner,
+    #[msg("IncorrectAuthority")]
+    IncorrectAuthority,
     #[msg("StoreNumberDoesntMatchCompanyStoreCount")]
     StoreNumberDoesntMatchCompanyStoreCount,
     #[msg("NotMutable")]
     NotMutable,
+    #[msg("authority Doesn't Exist")]
+    AuthorityDoesntExist,
+    #[msg("pay_to Doesn't Exist")]
+    PayToDoesntExist,
+    #[msg("Price Is Greater Payment")]
+    PriceIsGreaterThanPayment,
+    #[msg("name is too long")]
+    NameIsTooLong,
+    #[msg("description is too long")]
+    DescriptionIsTooLong,
+    #[msg("not enough inventory")]
+    NotEnoughInventory,
+    #[msg("insufficient funds")]
+    InsufficientFunds,
+    #[msg("unable to deduct from buyer account")]
+    UnableToDeductFromBuyerAccount,
+    #[msg("unable to add to pay_to account")]
+    UnableToAddToPayToAccount,
+}
+
+impl ProgramMetadata {
+    fn is_authorized(&self, key: &Pubkey) -> bool {
+        *key == self.authority || *key == self.secondary_authority
+    }
+}
+
+impl Store {
+    fn is_authorized(&self, key: &Pubkey) -> bool {
+        *key == self.authority || *key == self.secondary_authority
+    }
+}
+
+impl Product {
+    fn is_authorized(&self, key: &Pubkey) -> bool {
+        *key == self.authority || *key == self.secondary_authority
+    }
 }
