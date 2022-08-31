@@ -1,21 +1,21 @@
-use anchor_lang::{prelude::*};
+use anchor_lang::{prelude::*, solana_program::clock::Clock};
 use anchor_spl::{
     token::{ Token }
 };
 
 
-declare_id!("HUHWYMoHQEsZtDEPJNxPXYWf1yMpUWGFKadD2V8QneAM");
+declare_id!("3ym4V8kf1RctdZw9PoSzZhqLCEQFN1UyWLUUZpqjFnPS");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
 const PRODUCT_VERSION: u8 = 0;
-const PRODUCT_SNAPSHOT_VERSION: u8 = 0;
+const PRODUCT_SNAPSHOT_METADATA_VERSION: u8 = 0;
 const PURCHASE_TICKET_VERSION: u8 = 0;
-
 
 const PROGRAM_METADATA_BYTES: &[u8] = b"program_metadata";
 const STORE_SEED_BYTES : &[u8] = b"store";
 const PRODUCT_SEED_BYTES : &[u8] = b"product";
+const PRODUCT_SNAPSHOT_METADATA_BYTES: &[u8] = b"product_snapshot_metadata";
 const PRODUCT_SNAPSHOT_BYTES: &[u8] = b"product_snapshot";
 const PURCHASE_TICKET_BYTES : &[u8] = b"purchase_ticket";
 //const PRODUCT_MINT_BYTES : &[u8] = b"mint";
@@ -174,14 +174,16 @@ pub mod twine {
     pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16,
          quantity: u64, agreed_price: u64) -> Result<()>{
         
-        let buyer = &mut ctx.accounts.buyer;
         let product = &mut ctx.accounts.product;
+        let buyer = &mut ctx.accounts.buyer;        
+        let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
         let product_snapshot = &mut ctx.accounts.product_snapshot;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
         let pay_to = &ctx.accounts.pay_to;
         let purchase_ticket_lamports = **purchase_ticket.to_account_info().try_borrow_lamports()?;
         let clock = Clock::get()?;
-
+        let total_purchase_price = product.price * quantity;      
+        
         if product.inventory < quantity {
             return Err(ErrorCode::NotEnoughInventory.into());
         }
@@ -190,54 +192,69 @@ pub mod twine {
             return Err(ErrorCode::PriceIsGreaterThanPayment.into());
         }
 
-        msg!("purchase ticket has {} lamports and price is {}", purchase_ticket_lamports, product.price);
-        if product.price > purchase_ticket_lamports {
-            return Err(ErrorCode::InsufficientFunds.into());
-        }
+        msg!("purchase ticket has {} lamports and total price is {} (quantity={}, price={})",
+             purchase_ticket_lamports,
+             total_purchase_price,
+             quantity,
+             product.price);
 
+        if total_purchase_price > purchase_ticket_lamports {
+            return Err(ErrorCode::InsufficientFunds.into());
+        }        
+            
         require_keys_eq!(pay_to.key(), product.pay_to.key());
 
-        product_snapshot.bump =  *ctx.bumps.get("product_snapshot").unwrap();
-        product_snapshot.version = PRODUCT_SNAPSHOT_VERSION;
-        product_snapshot.slot = clock.slot;
-        product_snapshot.timestamp = clock.unix_timestamp;
-        //product_snapshot.snapshot =  Box::new(product.clone()); //snapshot the product for future reference        
-        product_snapshot.nonce = _nonce;
+        msg!("purchase_ticket lamports: {}, pay_to lamports: {}", 
+        **purchase_ticket.to_account_info().try_borrow_lamports()?,
+        **pay_to.to_account_info().try_borrow_lamports()?);
+
+        let from = &mut purchase_ticket.to_account_info();
+        let post_from = from
+            .lamports()
+            .checked_sub(total_purchase_price)
+            .ok_or(ErrorCode::UnableToDeductFromBuyerAccount)?;
+        let post_to = pay_to
+            .lamports()
+            .checked_add(total_purchase_price)
+            .ok_or(ErrorCode::UnableToAddToPayToAccount)?;
+        
+        **from.try_borrow_mut_lamports().unwrap() = post_from;
+        **pay_to.try_borrow_mut_lamports().unwrap() = post_to;
+
+        msg!("remaining purchase_ticket lamports: {}, pay_to lamports: {}", 
+            **purchase_ticket.to_account_info().try_borrow_lamports()?,
+            **pay_to.to_account_info().try_borrow_lamports()?);
+
+
+        product_snapshot_metadata.bump = *ctx.bumps.get("product_snapshot_metadata").unwrap();
+        product_snapshot_metadata.version = PRODUCT_SNAPSHOT_METADATA_VERSION;
+        product_snapshot_metadata.slot = clock.slot;
+        product_snapshot_metadata.timestamp = clock.unix_timestamp;   
+        product_snapshot_metadata.product = product.key();
+        product_snapshot_metadata.product_snapshot =  product_snapshot.key();
+        product_snapshot_metadata.nonce = _nonce;
+
 
         purchase_ticket.bump = *ctx.bumps.get("purchase_ticket").unwrap();
         purchase_ticket.version = PURCHASE_TICKET_VERSION;
         purchase_ticket.slot = clock.slot;
         purchase_ticket.timestamp = clock.unix_timestamp;
-        purchase_ticket.product = product.key();
-        purchase_ticket.product_snapshot = product_snapshot.key();
+        purchase_ticket.product = product.key(); 
+        purchase_ticket.product_snapshot_metadata = product_snapshot_metadata.key();
+        purchase_ticket.product_snapshot = product_snapshot.key();        
         purchase_ticket.buyer = buyer.key();
         purchase_ticket.pay_to = pay_to.key();
-        purchase_ticket.authority = ctx.accounts.buy_for.key();
-        purchase_ticket.redeemed = false;
+        purchase_ticket.authority = ctx.accounts.buy_for.key(); 
         purchase_ticket.nonce = _nonce;
-        
-        msg!("purchase_ticket lamports: {}, pay_to lamports: {}", 
-            **purchase_ticket.to_account_info().try_borrow_lamports()?,
-            **pay_to.to_account_info().try_borrow_lamports()?);
+        purchase_ticket.quantity = quantity;
+        purchase_ticket.redeemed = 0;        
 
-            let from = &mut purchase_ticket.to_account_info();
-            let post_from = from
-                .lamports()
-                .checked_sub(product.price)
-                .ok_or(ErrorCode::UnableToDeductFromBuyerAccount)?;
-            let post_to = pay_to
-                .lamports()
-                .checked_add(product.price)
-                .ok_or(ErrorCode::UnableToAddToPayToAccount)?;
-            
-            **from.try_borrow_mut_lamports().unwrap() = post_from;
-            **pay_to.try_borrow_mut_lamports().unwrap() = post_to;
+        let product_clone = product.clone().into_inner();
+        ctx.accounts.product_snapshot.set_inner(product_clone);
+        ctx.accounts.product_snapshot.is_snapshot = true;
 
+        product.inventory -= quantity;
 
-        msg!("remaining purchase_ticket lamports: {}, pay_to lamports: {}", 
-            **purchase_ticket.to_account_info().try_borrow_lamports()?,
-            **pay_to.to_account_info().try_borrow_lamports()?);
-    
         /*
         let token_program = ctx.accounts.token_program.to_account_info();
         let mint_to_accounts = MintTo {
@@ -261,7 +278,7 @@ pub mod twine {
             quantity
         )?;
         */
-
+       
         Ok(())
     }
 
@@ -282,11 +299,11 @@ pub struct Initialize<'info> {
     pub creator: Signer<'info>,
 
     /// CHECK:
-    pub authority: UncheckedAccount<'info>,
+    pub authority: AccountInfo<'info>,
     /// CHECK:
-    pub secondary_authority: UncheckedAccount<'info>,
+    pub secondary_authority: AccountInfo<'info>,
     /// CHECK:
-    pub fee_account: UncheckedAccount<'info>,
+    pub fee_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -474,26 +491,46 @@ pub struct BuyProduct<'info> {
     */
 
     #[account(
+        mut,
         seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()], 
         bump=product.bump
     )]
     pub product: Box<Account<'info, Product>>,
-    
+
     #[account(
         init,
         payer = buyer,
-        space = 8 + PRODUCT_SNAPSHOT_SIZE + product.data.len(),
-        seeds = [PRODUCT_SNAPSHOT_BYTES, product.key().as_ref(), buyer.key().as_ref(), &_nonce.to_be_bytes()],
+        space = 8 + PRODUCT_SNAPSHOT_METADATA_SIZE,
+        seeds = [
+            PRODUCT_SNAPSHOT_METADATA_BYTES,
+            product.key().as_ref(),
+            buyer.key().as_ref(),
+            &_nonce.to_be_bytes()
+        ],
         bump
     )]
-    pub product_snapshot: Account<'info, ProductSnapshot>,
+    pub product_snapshot_metadata: Account<'info, ProductSnapshotMetadata>,
+
+    #[account(
+        init,
+        payer = buyer,
+        space = 8 + PRODUCT_SIZE + product.data.len(),
+        seeds=[PRODUCT_SNAPSHOT_BYTES, product_snapshot_metadata.key().as_ref()], 
+        bump
+    )]
+    pub product_snapshot: Box<Account<'info, Product>>,    
+
 
     #[account(
         init,
         payer = buyer,
         space = 8 + PURCHASE_TICKET_SIZE,
         //make nonce part of the seed, because in the future a new snapshot will only be created when a product changes
-        seeds = [PURCHASE_TICKET_BYTES, product_snapshot.key().as_ref(), buyer.key().as_ref(), &_nonce.to_be_bytes()], 
+        seeds = [
+            PURCHASE_TICKET_BYTES,
+            product_snapshot_metadata.key().as_ref(),
+            buyer.key().as_ref(),
+            &_nonce.to_be_bytes()], 
         bump
     )]
     pub purchase_ticket: Account<'info, PurchaseTicket>,
@@ -570,7 +607,7 @@ pub struct Store{
 //pub const PRODUCT_SKU_SIZE: usize = 4+25;
 pub const PRODUCT_NAME_SIZE: usize = 4+100;
 pub const PRODUCT_DESCRIPTION_SIZE: usize = 4+200;
-pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 32 + 32 + (1+32) + 8 + 8 +  PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
+pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + (1+32) + 32 + (1+32) + 8 + 8 +  PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
 
 #[account]
 pub struct Product{
@@ -582,7 +619,7 @@ pub struct Product{
     pub secondary_authority: Pubkey, //32; burner wallet or delegation...
     pub id: u32, //4; unique store id used as part of the PDA seed 
     pub tag: u64, //8; used for misc. tagging for simplifying queries. bitmasking maybe?    
-
+    pub is_snapshot: bool, //1;
     pub usable_snapshot: Option<Pubkey>, //1+32; set to None on product changes. On buys, if it's none, take a snapshot, otherwise use the existing snapshot
     //pub mint: Pubkey, //32; used to mint a product token to the buyer
     pub pay_to: Pubkey, //32; where payments should be sent. can be different than the authority
@@ -601,20 +638,19 @@ pub struct Product{
 /// make sure to update sizes and fields as product changes. maybe just serialize and compress the whole thing?
 /// it's more searchable when not compressed
 
-const PRODUCT_NONCE_SIZE: usize = 2;
-const PRODUCT_SNAPSHOT_SIZE: usize = 1 + 1 + 8 + 8 + PRODUCT_NONCE_SIZE + 4;
+const PRODUCT_SNAPSHOT_METADATA_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 2;
 #[account]
-pub struct ProductSnapshot {
+pub struct ProductSnapshotMetadata {
     pub bump: u8, //1;
     pub version: u8, //1;
     pub slot: u64, //8;
     pub timestamp: i64, //8; unixtimestamp
-    pub nonce: u16, //2; 
-    //pub snapshot: Box<Product>, //4 + size of product
+    pub product: Pubkey, //32; 
+    pub product_snapshot: Pubkey, //32; pointer to snapshot
+    pub nonce: u16, //2;
 }
 
-const PURCHASE_TICKET_NONCE_SIZE: usize = 2;
-const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 1 + PURCHASE_TICKET_NONCE_SIZE;
+const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 2;
 #[account]
 pub struct PurchaseTicket {
     pub bump: u8, //1;
@@ -622,11 +658,13 @@ pub struct PurchaseTicket {
     pub slot: u64, //8;
     pub timestamp: i64, //8; unixtimestamp
     pub product: Pubkey, //32;
+    pub product_snapshot_metadata: Pubkey, //32;
     pub product_snapshot: Pubkey, //32;
     pub buyer: Pubkey, //32;
     pub pay_to: Pubkey, //32;
-    pub authority: Pubkey, //32;    
-    pub redeemed: bool, //1;
+    pub authority: Pubkey, //32;
+    pub quantity: u64, //8;
+    pub redeemed: u64, //8;
     pub nonce: u16, //2;
 }
 

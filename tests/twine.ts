@@ -140,8 +140,6 @@ describe("twine", () => {
   });
 
 
-
-/*
   it("Initialize Program", async () => {
     let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
     
@@ -155,9 +153,9 @@ describe("twine", () => {
     .accounts({
       programMetadata: programMetadataPda,
       creator: creatorKeypair.publicKey,
-      authority: creatorKeypair.publicKey,
+      authority: provider.publicKey,
       secondaryAuthority: creatorKeypair.publicKey,
-      feeAccount: creatorKeypair.publicKey,    
+      feeAccount: provider.publicKey,
     })
     .transaction();
 
@@ -168,9 +166,9 @@ describe("twine", () => {
     expect(programMetadata.initialized).is.equal(true);
     expect(programMetadata.version).is.equal(0);
     expect(programMetadata.creator).is.eql(creatorKeypair.publicKey);
-    expect(programMetadata.authority).is.eql(creatorKeypair.publicKey);
+    expect(programMetadata.authority).is.eql(provider.publicKey);
     expect(programMetadata.secondaryAuthority).is.eql(creatorKeypair.publicKey);
-    expect(programMetadata.feeAccount).is.eql(creatorKeypair.publicKey);
+    expect(programMetadata.feeAccount).is.eql(provider.publicKey);
   });
 
   it("Create Store", async () => {
@@ -338,7 +336,7 @@ describe("twine", () => {
     expect(updatedProduct.data).is.equal(updatedProductData);
   });
 
-*/
+
   it("Create Lone Product", async () => {    
     //const productMintDecimals = 3;
     const data = JSON.stringify({loneproduct:true});
@@ -367,6 +365,7 @@ describe("twine", () => {
     expect(createdProduct.secondaryAuthority).is.eql(creatorKeypair.publicKey);
     expect(createdProduct.id).is.equal(loneProductId); 
     expect(createdProduct.tag.toNumber()).is.equal(0); 
+    expect(createdProduct.isSnapshot).is.equal(false); 
     //expect(createdProduct.mint).is.eql(loneProductMintPda);
     expect(createdProduct.payTo).is.eql(paytoKeypair.publicKey);
     expect(createdProduct.store).is.eql(null); 
@@ -398,19 +397,27 @@ describe("twine", () => {
     const loneProduct = await program.account.product.fetch(loneProductPda);
     const quantity = 1;
     const nonce = generateRandomU16();
-    const [productSnapshotPda, productSnapshotPdaBump] = PublicKey.findProgramAddressSync(
+
+    const [productSnapshotMetadataPda, productSnapshotMetadataPdaBump] = PublicKey.findProgramAddressSync(
       [
-        anchor.utils.bytes.utf8.encode("product_snapshot"),
+        anchor.utils.bytes.utf8.encode("product_snapshot_metadata"),
         loneProductPda.toBuffer(),
         creatorKeypair.publicKey.toBuffer(),
         Buffer.from(uIntToBytes(nonce,2,"setUint")),
       ], program.programId);
+
+    const [productSnapshotPda, productSnapshotPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("product_snapshot"),
+        productSnapshotMetadataPda.toBuffer(),
+      ], program.programId);
+
     const [purchaseTicketPda, purchaseTicketPdaBump] = PublicKey.findProgramAddressSync(
       [
-        anchor.utils.bytes.utf8.encode("purchase_ticket"), 
-        productSnapshotPda.toBuffer(),
+        anchor.utils.bytes.utf8.encode("purchase_ticket"),
+        productSnapshotMetadataPda.toBuffer(),
         creatorKeypair.publicKey.toBuffer(),
-        Buffer.from(uIntToBytes(nonce,2,"setUint")),
+        Buffer.from(uIntToBytes(nonce,2,"setUint"))
       ], program.programId);
 
     const transferToPurchaseTicketIx = anchor.web3.SystemProgram.transfer({
@@ -424,6 +431,7 @@ describe("twine", () => {
       .accounts({
         //mint: loneProduct.mint,
         product: loneProductPda,
+        productSnapshotMetadata: productSnapshotMetadataPda,
         productSnapshot: productSnapshotPda,
         buyer: creatorKeypair.publicKey,
         buyFor: creatorKeypair.publicKey,
@@ -442,22 +450,45 @@ describe("twine", () => {
 
     const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
 
-    console.log('getting snapshot')
-;    const productSnapshot = await program.account.productSnapshot.fetch(productSnapshotPda);
-    expect(productSnapshot.bump).is.equal(productSnapshotPdaBump);
-    expect(productSnapshot.nonce).is.equal(nonce);
-    //expect(productSnapshot.product.)
+    const productSnapshot = await program.account.product.fetch(productSnapshotPda);
+    expect(productSnapshot.bump).is.equal(loneProduct.bump);
+    expect(productSnapshot.status).is.equal(loneProduct.status);
+    expect(productSnapshot.creator).is.eql(loneProduct.creator);
+    expect(productSnapshot.authority).is.eql(loneProduct.authority);
+    expect(productSnapshot.secondaryAuthority).is.eql(loneProduct.secondaryAuthority);
+    expect(productSnapshot.id).is.equal(loneProduct.id); 
+    expect(productSnapshot.tag.toNumber()).is.equal(loneProduct.tag.toNumber()); 
+    expect(productSnapshot.isSnapshot).is.equal(true); 
+    //expect(productSnapshot.mint).is.eql(loneProduct.mint);
+    expect(productSnapshot.payTo).is.eql(loneProduct.payTo);
+    expect(productSnapshot.store).is.eql(loneProduct.store); 
+    expect(productSnapshot.price.toNumber()).is.equal(loneProduct.price.toNumber());
+    expect(productSnapshot.inventory.toNumber()).is.equal(loneProduct.inventory.toNumber());
+    expect(productSnapshot.name).is.equal(loneProduct.name);
+    expect(productSnapshot.description).is.equal(loneProduct.description)    
+    expect(productSnapshot.data).is.equal(loneProduct.data);
 
-    console.log('getting purchase ticket');
+    const loneProductAfterPurchase = await program.account.product.fetch(loneProductPda);
+    expect(loneProductAfterPurchase.isSnapshot).is.equal(false); 
+    expect(loneProductAfterPurchase.inventory.toNumber()).is.equal(loneProduct.inventory.toNumber() - quantity);
+
+
+    const productSnapshotMetadata = await program.account.productSnapshotMetadata.fetch(productSnapshotMetadataPda);
+    expect(productSnapshotMetadata.bump).is.equal(productSnapshotMetadataPdaBump);
+    expect(productSnapshotMetadata.product).not.equal(loneProductPda);
+    expect(productSnapshotMetadata.productSnapshot).not.equal(productSnapshotPda);
+    expect(productSnapshotMetadata.nonce).is.equal(nonce);
+
+
     const purchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
     expect(purchaseTicket.bump).is.equal(purchaseTicketPdaBump);
-    expect(purchaseTicket.nonce).is.equal(nonce);
     expect(purchaseTicket.product).is.eql(loneProductPda);
+    expect(purchaseTicket.productSnapshotMetadata).is.eql(productSnapshotMetadataPda);
     expect(purchaseTicket.productSnapshot).is.eql(productSnapshotPda);
     expect(purchaseTicket.buyer).is.eql(creatorKeypair.publicKey);
     expect(purchaseTicket.payTo).is.eql(loneProduct.payTo);
     expect(purchaseTicket.authority).is.eql(creatorKeypair.publicKey);
-    expect(purchaseTicket.redeemed).is.equal(false);
+    expect(purchaseTicket.redeemed.toNumber()).is.equal(0);
     expect(purchaseTicket.nonce).is.equal(nonce);
   
     
@@ -471,7 +502,6 @@ describe("twine", () => {
     //expect(buyForAccount.mint).is.eql(loneProduct.mint);
   });
 
-  /*
 
   it("Update Lone Product", async () => {
     const updatedProductName = productName + "-updated";
@@ -688,7 +718,6 @@ describe("twine", () => {
       expect(loadedProducts).is.equal(data.products.length);
     }); //load products
 
-  }); //mock data
-  */  
-  
+  }); //mock data 
+
 });
