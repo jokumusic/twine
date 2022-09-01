@@ -4,7 +4,7 @@ use anchor_spl::{
 };
 
 
-declare_id!("3ym4V8kf1RctdZw9PoSzZhqLCEQFN1UyWLUUZpqjFnPS");
+declare_id!("7bREQ6dfqMM31jAPHZiXHNJvvKkefEgJUCQGk9ZyZDah");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
@@ -291,7 +291,7 @@ pub struct Initialize<'info> {
     #[account(init,
         payer = creator,
         space = 8 + PROGRAM_METADATA_SIZE,
-        seeds = [PROGRAM_METADATA_BYTES, creator.key().as_ref()],
+        seeds = [PROGRAM_METADATA_BYTES],
         bump)]
     pub program_metadata: Account<'info, ProgramMetadata>,
 
@@ -410,7 +410,7 @@ pub struct CreateStoreProduct<'info> {
     pub pay_to: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    //pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
 }
 
@@ -559,7 +559,7 @@ pub struct BuyProduct<'info> {
     //pub token_program: Program<'info, Token>,
     //pub associated_token_program: Program<'info, AssociatedToken>,
     //pub rent: Sysvar<'info, Rent>,
-    pub clock: Sysvar<'info, Clock>,
+    //pub clock: Sysvar<'info, Clock>,
 }
 
 

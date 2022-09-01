@@ -1,7 +1,7 @@
 import * as anchor from "@project-serum/anchor";
 import { Program } from "@project-serum/anchor";
 import { Twine } from "../target/types/twine";
-import {PublicKey, Keypair, sendAndConfirmTransaction, SYSVAR_CLOCK_PUBKEY } from "@solana/web3.js";
+import {PublicKey, Keypair, sendAndConfirmTransaction} from "@solana/web3.js";
 import { assert, expect } from "chai";
 import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
@@ -62,7 +62,6 @@ describe("twine", () => {
   let [programMetadataPda, programMetadataPdaBump] = PublicKey.findProgramAddressSync(
     [
       anchor.utils.bytes.utf8.encode("program_metadata"), 
-      creatorKeypair.publicKey.toBuffer(),
     ], program.programId);
   let [storePda, storePdaBump] = PublicKey.findProgramAddressSync(
     [
@@ -184,8 +183,8 @@ describe("twine", () => {
     })
     .transaction();
 
-    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
-    
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);  
+
     const createdStore = await program.account.store.fetch(storePda);
     expect(createdStore.bump).is.equal(storePdaBump);
     expect(createdStore.status).is.equal(1);
@@ -249,7 +248,7 @@ describe("twine", () => {
         authority: creatorKeypair.publicKey,
         secondaryAuthority: creatorKeypair.publicKey,  
         payTo: paytoKeypair.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        //tokenProgram: TOKEN_PROGRAM_ID,
       })
       .transaction();
    
@@ -351,7 +350,7 @@ describe("twine", () => {
       authority: creatorKeypair.publicKey,
       secondaryAuthority: creatorKeypair.publicKey,
       payTo: paytoKeypair.publicKey,
-      tokenProgram: TOKEN_PROGRAM_ID,
+      //tokenProgram: TOKEN_PROGRAM_ID,
     })
     .transaction();
    
@@ -437,7 +436,7 @@ describe("twine", () => {
         buyFor: creatorKeypair.publicKey,
         payTo: loneProduct.payTo,
         purchaseTicket: purchaseTicketPda,
-        clock: SYSVAR_CLOCK_PUBKEY,
+        //clock: SYSVAR_CLOCK_PUBKEY,
       })
       .instruction();
 
