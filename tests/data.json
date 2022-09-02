@@ -3,8 +3,8 @@
 		{
 			"id": "m1fPQuKFCUM4",
 			"img": "https://cryptosrus.com/wp-content/uploads/2021/12/Anatoly-Yakovenko-of-Solana-Reveals-Why-Were-Not-in-a-Crypto-Bubble.jpg",
-			"name": "Anatoly Yakovenko Official",
-			"description": "Hi! Come watch me eat glass!",
+			"displayName": "Anatoly Yakovenko Official",
+			"displayDescription": "Hi! Come watch me eat glass!",
 			"twitter": "https://twitter.com/aeyakovenko",
 			"instagram": "https://www.instagram.com/anatolyyakovenko.sola/",
 			"rating": 5,
@@ -13,8 +13,8 @@
 		{
 			"id": "VsGTwYWFzjDO",
 			"img": "https://www.dualipa.com/wp-content/uploads/2019/10/DONT_START_NOW.jpg",
-			"name": "Dua Lipa Official",
-			"description": "This is the official Dua Lipa store!",
+			"displayName": "Dua Lipa Official",
+			"displayDescription": "This is the official Dua Lipa store!",
 			"twitter": "https://twitter.com/DUALIPA",
 			"instagram": "https://www.instagram.com/dualipa",
 			"facebook": "https://www.facebook.com/DuaLipa",
@@ -25,8 +25,8 @@
 		{
 			"id": "WvgIJTJmjGJz",
 			"img": "https://theworldunplugged.files.wordpress.com/2010/11/screen-shot-2010-12-07-at-1-35-48-pm.png",
-			"name": "Busy Media Inc.",
-			"description": "Busy Media Inc. is the leading distributor of music, videos, books and art!",
+			"displayName": "Busy Media Inc.",
+			"displayDescription": "Busy Media Inc. is the leading distributor of music, videos, books and art!",
 			"twitter": "https://",
 			"instagram": "https://",
 			"web": "https://",
@@ -35,8 +35,8 @@
 		{
 			"id": "TvGFgAJ6qzf7",
 			"img": "https://media.gettyimages.com/vectors/clothes-and-accessories-related-vector-banner-design-concept-modern-vector-id1341159950?k=20&m=1341159950&s=612x612&w=0&h=JQiJzyVQEH8vtbGM4LCVbW2bC6yqJRu3vDM6Bws6qp8=",
-			"name": "Trendy Clothing Co.",
-			"description": "All the trendy modern, old, contemporary clothes are here!",
+			"displayName": "Trendy Clothing Co.",
+			"displayDescription": "All the trendy modern, old, contemporary clothes are here!",
 			"twitter": "https://",
 			"web": "https://",
 			"rating": 3.5
@@ -44,8 +44,8 @@
 		{
 			"id": "PNpJC8pYFxjG",
 			"img": "https://images-na.ssl-images-amazon.com/images/G/01/gc/designs/livepreview/amazon_dkblue_noto_email_v2016_us-main._CB468775337_.png",
-			"name": "Amazon",
-			"description": "Official Amazon Store",
+			"displayName": "Amazon",
+			"displayDescription": "Official Amazon Store",
 			"twitter": "https://twitter.com/amazon",
 			"web": "https://amazon.com",
 			"rating": 3.8
@@ -53,8 +53,8 @@
 		{
 			"id": "FFdwdYrsnm7l",
 			"img": "https://m.media-amazon.com/images/M/MV5BNDVkYjU0MzctMWRmZi00NTkxLTgwZWEtOWVhYjZlYjllYmU4XkEyXkFqcGdeQXVyNTA4NzY1MzY@._V1_.jpg",
-			"name": "Friends Official",
-			"description": "Your F.R.I.E.N.D.S store",
+			"displayName": "Friends Official",
+			"displayDescription": "Your F.R.I.E.N.D.S store",
 			"web": "https://www.warnerbros.com/tv/friends",
 			"instagram": "https://www.instagram.com/friends/",
 			"rating": 5
@@ -62,8 +62,8 @@
 		{
 			"id": "WI1zsKHifGGy",
 			"img": "https://images.indianexpress.com/2017/06/tom-cruise-759.jpg?w=389",
-			"name": "Tom Cruise Official",
-			"description": "I am THE CRUISE, not the Cruz...",
+			"displayName": "Tom Cruise Official",
+			"displayDescription": "I am THE CRUISE, not the Cruz...",
 			"twitter": "https://twitter.com/tomcruise",
 			"instagram": "https://www.instagram.com/tomcruise",
 			"facebook": "https://www.facebook.com/officialtomcruise",
@@ -72,8 +72,8 @@
 		{
 			"id": "dCdFiBvQ5YUb",
 			"img": "https://cdn.mos.cms.futurecdn.net/5StAbRHLA4ZdyzQZVivm2c-1200-80.jpg.webp",
-			"name": "Walmart",
-			"description": "Save money. Live better.",
+			"displayName": "Walmart",
+			"displayDescription": "Save money. Live better.",
 			"twitter": "https://twitter.com/Walmart",
 			"web": "https://walmart.com",
 			"rating": 2
@@ -83,8 +83,8 @@
 		{
 			"storeId": "m1fPQuKFCUM4",
 			"img": "https://i.etsystatic.com/25894060/r/il/749abc/3333286358/il_794xN.3333286358_o0jb.jpg",
-			"name": "Solana Baseball Cap",
-			"description": "SOL|Cryptocurrency HAT|Investor Gift - Adult Unisex Size",
+			"displayName": "Solana Baseball Cap",
+			"displayDescription": "SOL|Cryptocurrency HAT|Investor Gift - Adult Unisex Size",
 			"inventory": 1000,
 			"price": 25,
 			"rating": 5,
@@ -92,8 +92,8 @@
 		},
 		{
 			"img": "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
-			"name": "Katie Perry - I Kissed A Girl",
-			"description": "Purchase song from official Katy Perry Store",
+			"displayName": "Katie Perry - I Kissed A Girl",
+			"displayDescription": "Purchase song from official Katy Perry Store",
 			"inventory": 2000000,
 			"price": 1,
 			"rating": 3,
@@ -101,8 +101,8 @@
 		},
 		{
 			"img": "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
-			"name": "A Carrot",
-			"description": "Buy this carrot!",
+			"displayName": "A Carrot",
+			"displayDescription": "Buy this carrot!",
 			"inventory": 1,
 			"price": 20,
 			"rating": 5,
@@ -110,8 +110,8 @@
 		},
 		{
 			"img": "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
-			"name": "Solana Breakpoint 2022 Ticket",
-			"description": "This ticket is good for entry at Solana Breakpoint 2022!",
+			"displayName": "Solana Breakpoint 2022 Ticket",
+			"displayDescription": "This ticket is good for entry at Solana Breakpoint 2022!",
 			"inventory": 10000,
 			"price": 1000,
 			"redemptionType": 1
@@ -119,8 +119,8 @@
 		{
 			"storeId": "dCdFiBvQ5YUb",
 			"img": "https://images.albertsons-media.com/is/image/ABS/123050070?$ecom-pdp-desktop$&defaultImage=Not_Available",
-			"name": "SPAM Classic 25% Less Sodium - 12 Oz",
-			"description": "The real stuff just tastes better...",
+			"displayName": "SPAM Classic 25% Less Sodium - 12 Oz",
+			"displayDescription": "The real stuff just tastes better...",
 			"inventory": 250,
 			"price": 4,
 			"rating": 5,

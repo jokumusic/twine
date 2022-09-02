@@ -4,7 +4,7 @@ use anchor_spl::{
 };
 
 
-declare_id!("6r2E5EkhhNEyChaZmwzNbgviYB2Yr3Gcv92SWxSFB2im");
+declare_id!("FWMbq7gdPD2nYH1gndgtZS8C1Tp4pzLXTRxQ9R61AhHZ");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
