@@ -4,7 +4,7 @@ use anchor_spl::{
 };
 
 
-declare_id!("7bREQ6dfqMM31jAPHZiXHNJvvKkefEgJUCQGk9ZyZDah");
+declare_id!("6r2E5EkhhNEyChaZmwzNbgviYB2Yr3Gcv92SWxSFB2im");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
@@ -90,7 +90,7 @@ pub mod twine {
 
 
     pub fn create_product(ctx: Context<CreateProduct>, id: u32, status: u8, //_mint_decimals: u8,
-        price: u64, inventory: u64, name: String, description: String, data: String) -> Result<()> {        
+        price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {        
         let product = &mut ctx.accounts.product;
 
         if name.len() > PRODUCT_NAME_SIZE {
@@ -114,6 +114,7 @@ pub mod twine {
         product.store = None;
         product.price = price;
         product.inventory = inventory;
+        product.redemption_type = redemption_type;
         product.name = name;
         product.description = description;
         product.data = data;
@@ -122,7 +123,7 @@ pub mod twine {
     }
 
     pub fn create_store_product(ctx: Context<CreateStoreProduct>, id: u32, status: u8, //_mint_decimals: u8,
-        price: u64, inventory: u64, name: String, description: String, data: String) -> Result<()> {
+        price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {
         
         let store = &mut ctx.accounts.store;
         let product = &mut ctx.accounts.product;
@@ -148,6 +149,7 @@ pub mod twine {
         product.store = Some(store.key());
         product.price = price;
         product.inventory = inventory;
+        product.redemption_type = redemption_type;
         product.name = name;
         product.description = description;
         product.data = data;
@@ -157,11 +159,13 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, name: String, description: String, data: String) -> Result<()> {
+    pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, redemption_type: u8,
+        name: String, description: String, data: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
 
         product.status = status;
         product.price = price;
+        product.redemption_type = redemption_type;
         product.inventory = inventory;
         product.name = name;
         product.description = description;
@@ -367,7 +371,8 @@ pub struct UpdateStore<'info> {
 //consider using metaplex for this.
 #[derive(Accounts)]
 #[instruction(id: u32, status: u8, //_mint_decimals: u8,
-    price: u64, inventory: u64, name: String, description: String, data: String)]
+    price: u64, inventory: u64, redemption_type: u8,
+    name: String, description: String, data: String)]
 pub struct CreateStoreProduct<'info> {
 /*
     #[account(
@@ -416,7 +421,8 @@ pub struct CreateStoreProduct<'info> {
 
 #[derive(Accounts)]
 #[instruction(id: u32, status: u8, //_mint_decimals: u8,
-    price: u64, inventory: u64, name: String, description: String, data: String)]
+    price: u64, inventory: u64, redemption_type: u8,
+    name: String, description: String, data: String)]
 pub struct CreateProduct<'info> {
 /*
     #[account(
@@ -458,7 +464,8 @@ pub struct CreateProduct<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(status: u8, price: u64, inventory: u64, name: String, description: String, data: String)]
+#[instruction(status: u8, price: u64, inventory: u64, redemption_type: u8,
+    name: String, description: String, data: String)]
 pub struct UpdateProduct<'info> {
     #[account(mut,
         constraint = product.is_authorized(&authority.key),
@@ -607,7 +614,7 @@ pub struct Store{
 //pub const PRODUCT_SKU_SIZE: usize = 4+25;
 pub const PRODUCT_NAME_SIZE: usize = 4+100;
 pub const PRODUCT_DESCRIPTION_SIZE: usize = 4+200;
-pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + (1+32) + 32 + (1+32) + 8 + 8 +  PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
+pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + (1+32) + 32 + (1+32) + 8 + 8 + 1 + PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
 
 #[account]
 pub struct Product{
@@ -624,8 +631,9 @@ pub struct Product{
     //pub mint: Pubkey, //32; used to mint a product token to the buyer
     pub pay_to: Pubkey, //32; where payments should be sent. can be different than the authority
     pub store: Option<Pubkey>, //1+32; address of store PDA. maybe set to default Pubkey and save a byte?
-    pub price: u64, //8; price of product. needs to be stable, but stablecoins can die, so most likely lamports since they'll be around as long as Solana is    
+    pub price: u64, //8; price of product. needs to be stable, but stablecoins can die, so most likely lamports since they'll be around as long as Solana is
     pub inventory: u64, //8;
+    pub redemption_type: u8, //1;
     pub name: String, //4+100; product name
     pub description: String, //4+200; product description  
     pub data: String, //4+ whatever size they pay for

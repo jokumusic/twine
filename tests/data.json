@@ -87,7 +87,8 @@
 			"description": "SOL|Cryptocurrency HAT|Investor Gift - Adult Unisex Size",
 			"inventory": 1000,
 			"price": 25,
-			"rating": 5
+			"rating": 5,
+			"redemptionType": 0
 		},
 		{
 			"img": "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
@@ -95,7 +96,8 @@
 			"description": "Purchase song from official Katy Perry Store",
 			"inventory": 2000000,
 			"price": 1,
-			"rating": 3
+			"rating": 3,
+			"redemptionType": 0
 		},
 		{
 			"img": "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
@@ -103,14 +105,16 @@
 			"description": "Buy this carrot!",
 			"inventory": 1,
 			"price": 20,
-			"rating": 5
+			"rating": 5,
+			"redemptionType": 0
 		},
 		{
 			"img": "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
 			"name": "Solana Breakpoint 2022 Ticket",
 			"description": "This ticket is good for entry at Solana Breakpoint 2022!",
 			"inventory": 10000,
-			"price": 1000
+			"price": 1000,
+			"redemptionType": 1
 		},
 		{
 			"storeId": "dCdFiBvQ5YUb",
@@ -119,7 +123,8 @@
 			"description": "The real stuff just tastes better...",
 			"inventory": 250,
 			"price": 4,
-			"rating": 5
+			"rating": 5,
+			"redemptionType": 0
 		}
 	]
 }

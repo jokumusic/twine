@@ -236,10 +236,11 @@ describe("twine", () => {
   it("Create Store Product", async () => {    
     //const productMintDecimals = 3;
     const data = JSON.stringify({updated: true});
+    const redemptionType = 0;
 
     const tx = await program.methods
       .createStoreProduct(storeProductId, productStatus, //productMintDecimals, 
-      productPrice, productInventory, productName, productDescription, data)
+      productPrice, productInventory, redemptionType, productName, productDescription, data)
       .accounts({
         //mint: storeProductMintPda,
         product: storeProductPda,
@@ -279,6 +280,7 @@ describe("twine", () => {
     expect(createdProduct.store).is.eql(storePda); 
     expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
     expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
+    expect(createdProduct.redemptionType).is.equal(redemptionType);
     expect(createdProduct.name).is.equal(productName);
     expect(createdProduct.description).is.equal(productDescription)    
     expect(createdProduct.data).is.equal(data);
@@ -304,10 +306,11 @@ describe("twine", () => {
     const updatedProductPrice = 200000;
     const updatedProductInventory = 2;
     const updatedProductData = JSON.stringify({updated:true});
+    const updatedRedemptionType = 1;
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
-    .updateProduct(updatedProductStatus, new BN(updatedProductPrice), new BN(updatedProductInventory),
+    .updateProduct(updatedProductStatus, new BN(updatedProductPrice), new BN(updatedProductInventory), updatedRedemptionType,
         updatedProductName, updatedProductDescription, updatedProductData)
     .accounts({
       product: storeProductPda, 
@@ -339,10 +342,11 @@ describe("twine", () => {
   it("Create Lone Product", async () => {    
     //const productMintDecimals = 3;
     const data = JSON.stringify({loneproduct:true});
+    const redemptionType = 1;
 
     const tx = await program.methods
     .createProduct(loneProductId, productStatus, //productMintDecimals,
-     productPrice, productInventory, productName, productDescription, data)
+     productPrice, productInventory, redemptionType, productName, productDescription, data)
     .accounts({
       //mint: loneProductMintPda,
       product: loneProductPda,
@@ -370,6 +374,7 @@ describe("twine", () => {
     expect(createdProduct.store).is.eql(null); 
     expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
     expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
+    expect(createdProduct.redemptionType).is.equal(redemptionType);
     expect(createdProduct.name).is.equal(productName);
     expect(createdProduct.description).is.equal(productDescription)    
     expect(createdProduct.data).is.equal(data);
@@ -463,6 +468,7 @@ describe("twine", () => {
     expect(productSnapshot.store).is.eql(loneProduct.store); 
     expect(productSnapshot.price.toNumber()).is.equal(loneProduct.price.toNumber());
     expect(productSnapshot.inventory.toNumber()).is.equal(loneProduct.inventory.toNumber());
+    expect(productSnapshot.redemptionType).is.equal(loneProduct.redemptionType);
     expect(productSnapshot.name).is.equal(loneProduct.name);
     expect(productSnapshot.description).is.equal(loneProduct.description)    
     expect(productSnapshot.data).is.equal(loneProduct.data);
@@ -509,10 +515,12 @@ describe("twine", () => {
     const updatedData = JSON.stringify({updated: true});
     const updatedStatus = 0;
     const updatedInventory = 3;
+    const updatedRedemptionType = 2;
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
-    .updateProduct(updatedStatus, new BN(updatedProductPrice), new BN(updatedInventory), updatedProductName, updatedProductDescription, updatedData)
+    .updateProduct(updatedStatus, new BN(updatedProductPrice), new BN(updatedInventory), updatedRedemptionType, 
+      updatedProductName, updatedProductDescription, updatedData)
     .accounts({
       product: loneProductPda,
       authority: creatorKeypair.publicKey,
@@ -534,11 +542,11 @@ describe("twine", () => {
     expect(updatedProduct.store).is.equal(null); 
     expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
     expect(updatedProduct.inventory.toNumber()).is.equal(updatedInventory);
+    expect(updatedProduct.redemptionType).is.equal(updatedRedemptionType);
     expect(updatedProduct.name).is.equal(updatedProductName);
     expect(updatedProduct.description).is.equal(updatedProductDescription);
     expect(updatedProduct.data).is.equal(updatedData);
   });
-
 
   describe("Mock Data", ()=>{
       
@@ -625,6 +633,7 @@ describe("twine", () => {
         const productDescription = product.description;
         const productPrice = product.price ?? 0;
         const productInventory = product.inventory ?? 0;
+        const productRedemptionType = product.redemptionType ?? 0;
 
         const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
           [
@@ -645,6 +654,7 @@ describe("twine", () => {
                     //productMintDecimals,
                     new BN(productPrice), 
                     new BN(productInventory),
+                    productRedemptionType,
                     productName, 
                     productDescription,
                     dataString)
@@ -655,8 +665,7 @@ describe("twine", () => {
                   creator: creatorKeypair.publicKey,
                   authority: creatorKeypair.publicKey,
                   secondaryAuthority: creatorKeypair.publicKey,
-                  payTo: creatorKeypair.publicKey,
-                  tokenProgram: TOKEN_PROGRAM_ID,
+                  payTo: creatorKeypair.publicKey,                  
                 })
                 .transaction();
         } 
@@ -667,6 +676,7 @@ describe("twine", () => {
                     //productMintDecimals,
                     new BN(productPrice), 
                     new BN(productInventory),
+                    productRedemptionType,
                     productName, 
                     productDescription,        
                     dataString)
@@ -677,7 +687,6 @@ describe("twine", () => {
                   authority: creatorKeypair.publicKey,
                   secondaryAuthority: creatorKeypair.publicKey,
                   payTo: creatorKeypair.publicKey,
-                  tokenProgram: TOKEN_PROGRAM_ID,
                 })
                 .transaction();
         }
@@ -709,6 +718,7 @@ describe("twine", () => {
         expect(createdProduct.store).is.eql(mockStoreId ? mockStorePda : null); 
         expect(createdProduct.price.toNumber()).is.equal(productPrice);
         expect(createdProduct.inventory.toNumber()).is.equal(productInventory);
+        expect(createdProduct.redemptionType).is.equal(productRedemptionType);
         expect(createdProduct.name).is.equal(productName);
         expect(createdProduct.description).is.equal(productDescription);
         expect(createdProduct.data).is.equal(dataString);
@@ -718,5 +728,6 @@ describe("twine", () => {
     }); //load products
 
   }); //mock data 
+
 
 });
