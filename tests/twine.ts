@@ -36,7 +36,7 @@ const toBytes = (data, type) =>
 ///Most of the time the user program has to send transactions to a separate wallet program...
 const creatorKeypair = Keypair.generate();
 const secondaryAuthority = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
-const creatorAccountLamportsRequired = 300_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
+const creatorAccountLamportsRequired = 250_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
 const paytoAccountLamportsRequired = 40_000_000; //funds transferred from creatorAccount
 
 const provider = anchor.AnchorProvider.env();
@@ -138,7 +138,7 @@ describe("twine", () => {
     });
   });
 
-/*
+
   it("Initialize Program", async () => {
     let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
     
@@ -554,7 +554,6 @@ describe("twine", () => {
     expect(updatedProduct.data).is.equal(updatedData);
   });
 
-*/
   describe("Mock Data", ()=>{      
     const storeMap = new Map<string,number>();
 
@@ -597,7 +596,7 @@ describe("twine", () => {
         .transaction();
 
         const response = await anchor.web3
-          .sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair])
+          .sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'confirmed'})
           .catch(err=>console.log(err));     
         loadedStores++;
 

@@ -4,7 +4,7 @@ use anchor_spl::{
 };
 
 
-declare_id!("4DbTqTvrVmP5MeGMW2vJJAYwxAQjR2r9KJwRAqZnahQy");
+declare_id!("DHvX2ufjEgriS4u9QkTTZ4XLkz9i3EkBVmGK2fZpHnF");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
@@ -191,6 +191,10 @@ pub mod twine {
         let clock = Clock::get()?;
         let total_purchase_price = product.price * quantity;      
         
+        if product.status != 0 {
+            return Err(ErrorCode::ProductIsNotActive.into());
+        }
+
         if product.inventory < quantity {
             return Err(ErrorCode::NotEnoughInventory.into());
         }
@@ -717,15 +721,13 @@ pub enum ErrorCode {
     UninitializedAccount,
     #[msg("IncorrectAuthority")]
     IncorrectAuthority,
-    #[msg("StoreNumberDoesntMatchCompanyStoreCount")]
-    StoreNumberDoesntMatchCompanyStoreCount,
     #[msg("NotMutable")]
     NotMutable,
     #[msg("authority Doesn't Exist")]
     AuthorityDoesntExist,
     #[msg("pay_to Doesn't Exist")]
     PayToDoesntExist,
-    #[msg("Price Is Greater Payment")]
+    #[msg("price is greater than payment")]
     PriceIsGreaterThanPayment,
     #[msg("name is too long")]
     NameIsTooLong,
@@ -739,6 +741,10 @@ pub enum ErrorCode {
     UnableToDeductFromBuyerAccount,
     #[msg("unable to add to pay_to account")]
     UnableToAddToPayToAccount,
+    #[msg("product is not active")]
+    ProductIsNotActive,
+    #[msg("store is not active")]
+    StoreIsNotActive
 }
 
 impl ProgramMetadata {
