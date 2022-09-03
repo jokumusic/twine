@@ -92,7 +92,8 @@
 			"inventory": 25,
 			"price": 8,
 			"rating": 2,
-			"redemptionType": 1
+			"redemptionType": 1,
+			"status": 0
 		},
 		{
 			"storeId": "WI1zsKHifGGy",
@@ -106,7 +107,8 @@
 			"inventory": 500,
 			"price": 2500,
 			"rating": 2,
-			"redemptionType": 0
+			"redemptionType": 0,
+			"status": 0
 		},
 		{
 			"storeId": "m1fPQuKFCUM4",
@@ -120,7 +122,8 @@
 			"inventory": 1000,
 			"price": 25,
 			"rating": 5,
-			"redemptionType": 0
+			"redemptionType": 0,
+			"status": 0
 		},
 		{
 			"img": "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
@@ -134,7 +137,8 @@
 			"inventory": 2000000,
 			"price": 1,
 			"rating": 3,
-			"redemptionType": 0
+			"redemptionType": 0,
+			"status": 0
 		},
 		{
 			"img": "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
@@ -148,7 +152,8 @@
 			"inventory": 1,
 			"price": 20,
 			"rating": 5,
-			"redemptionType": 0
+			"redemptionType": 0,
+			"status": 0
 		},
 		{
 			"img": "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
@@ -163,7 +168,8 @@
 			"displayDescription": "This ticket is good for entry at Solana Breakpoint 2022!",
 			"inventory": 10000,
 			"price": 1000,
-			"redemptionType": 1
+			"redemptionType": 1,
+			"status": 0
 		},
 		{
 			"storeId": "dCdFiBvQ5YUb",
@@ -178,7 +184,8 @@
 			"inventory": 250,
 			"price": 4,
 			"rating": 5,
-			"redemptionType": 0
+			"redemptionType": 0,
+			"status": 0
 		}
 	]
 }

@@ -4,7 +4,7 @@ use anchor_spl::{
 };
 
 
-declare_id!("6snwfnAMf7dwgbwkJc8JuKdnHTRxGr3wRvjVVTevyHsY");
+declare_id!("4DbTqTvrVmP5MeGMW2vJJAYwxAQjR2r9KJwRAqZnahQy");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
@@ -70,7 +70,7 @@ pub mod twine {
     }
 
 
-    pub fn update_store(ctx: Context<UpdateStore>, name: String, description: String, data: String) -> Result<()> {
+    pub fn update_store(ctx: Context<UpdateStore>, status: u8, name: String, description: String, data: String) -> Result<()> {
         let store = &mut ctx.accounts.store;
 
         if name.len() > STORE_NAME_SIZE {
@@ -81,6 +81,7 @@ pub mod twine {
             return Err(ErrorCode::DescriptionIsTooLong.into());
         }
 
+        store.status = status;
         store.name = name;
         store.description = description;
         store.data = data;
@@ -354,7 +355,7 @@ pub struct CreateStore<'info> {
 
 
 #[derive(Accounts)]
-#[instruction(name: String, description: String, data: String)]
+#[instruction(status: u8, name: String, description: String, data: String)]
 pub struct UpdateStore<'info> {
     #[account(mut,
         constraint = store.is_authorized(&authority.key),

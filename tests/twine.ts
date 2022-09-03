@@ -56,7 +56,6 @@ describe("twine", () => {
   const productName = "test-product";
   const productDescription = "test-product-description";
   const productPrice = new BN(100000);
-  const productStatus = 1;
   const productInventory = new BN(5);
 
   let [programMetadataPda, programMetadataPdaBump] = PublicKey.findProgramAddressSync(
@@ -139,7 +138,7 @@ describe("twine", () => {
     });
   });
 
-
+/*
   it("Initialize Program", async () => {
     let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
     
@@ -173,9 +172,10 @@ describe("twine", () => {
 
   it("Create Store", async () => {
     const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
+    const storeStatus = 1;
 
     const tx = await program.methods
-    .createStore(storeId, 1, storeName.toLowerCase(), storeDescription.toLowerCase(), data)
+    .createStore(storeId, storeStatus, storeName.toLowerCase(), storeDescription.toLowerCase(), data)
     .accounts({
       store: storePda,
       creator: creatorKeypair.publicKey,
@@ -188,7 +188,7 @@ describe("twine", () => {
 
     const createdStore = await program.account.store.fetch(storePda);
     expect(createdStore.bump).is.equal(storePdaBump);
-    expect(createdStore.status).is.equal(1);
+    expect(createdStore.status).is.equal(storeStatus);
     expect(createdStore.id).is.equal(storeId);
     expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
     expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
@@ -205,11 +205,12 @@ describe("twine", () => {
   it("Update Store", async () => {
     const updatedStoreName = storeName + "-updated";
     const updatedStoreDescription = storeDescription + "-updated";
+    const updatedStoreStatus = 1;
     const data = JSON.stringify({displayName: updatedStoreName, displayDescription: updatedStoreDescription});
 
     //this should succeed because the owner is correct
     const tx = await program.methods
-    .updateStore(updatedStoreName.toLowerCase(), updatedStoreDescription.toLowerCase(), data)
+    .updateStore(updatedStoreStatus, updatedStoreName.toLowerCase(), updatedStoreDescription.toLowerCase(), data)
     .accounts({
       store: storePda,
       authority: creatorKeypair.publicKey,
@@ -220,7 +221,7 @@ describe("twine", () => {
 
     const updatedStore= await program.account.store.fetch(storePda);
     expect(updatedStore.bump).is.equal(storePdaBump);
-    expect(updatedStore.status).is.equal(1);
+    expect(updatedStore.status).is.equal(updatedStoreStatus);
     expect(updatedStore.creator).is.eql(creatorKeypair.publicKey);
     expect(updatedStore.authority).is.eql(creatorKeypair.publicKey);
     expect(updatedStore.secondaryAuthority).is.eql(secondaryAuthority);
@@ -238,6 +239,7 @@ describe("twine", () => {
     //const productMintDecimals = 3;
     const data = JSON.stringify({displayName: productName, displayDescription: productDescription});
     const redemptionType = 0;
+    const productStatus = 0;
 
     const tx = await program.methods
       .createStoreProduct(storeProductId, productStatus, //productMintDecimals, 
@@ -301,7 +303,7 @@ describe("twine", () => {
 
   
   it("Update Store Product", async () => {
-    const updatedProductStatus = 0;
+    const updatedProductStatus = 1;
     const updatedProductName = productName + "-updated";
     const updatedProductDescription = productDescription + "-updated";
     const updatedProductPrice = 200000;
@@ -344,9 +346,11 @@ describe("twine", () => {
     //const productMintDecimals = 3;
     const data = JSON.stringify({displayName: productName, displayDescription: productDescription});
     const redemptionType = 1;
+    const loneProductStatus = 0;
+
 
     const tx = await program.methods
-    .createProduct(loneProductId, productStatus, //productMintDecimals,
+    .createProduct(loneProductId, loneProductStatus, //productMintDecimals,
      productPrice, productInventory, redemptionType, productName.toLowerCase(), productDescription.toLowerCase(), data)
     .accounts({
       //mint: loneProductMintPda,
@@ -363,7 +367,7 @@ describe("twine", () => {
 
     const createdProduct = await program.account.product.fetch(loneProductPda);
     expect(createdProduct.bump).is.equal(loneProductPdaBump);
-    expect(createdProduct.status).is.equal(productStatus);
+    expect(createdProduct.status).is.equal(loneProductStatus);
     expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
     expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
     expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthority);
@@ -514,7 +518,7 @@ describe("twine", () => {
     const updatedProductDescription = productDescription + "-updated";
     const updatedProductPrice = 200000;
     const updatedData = JSON.stringify({displayName: updatedProductName, displayDescription: updatedProductDescription});
-    const updatedStatus = 0;
+    const updatedStatus = 1;
     const updatedInventory = 3;
     const updatedRedemptionType = 2;
 
@@ -550,7 +554,7 @@ describe("twine", () => {
     expect(updatedProduct.data).is.equal(updatedData);
   });
 
-
+*/
   describe("Mock Data", ()=>{      
     const storeMap = new Map<string,number>();
 
@@ -560,6 +564,7 @@ describe("twine", () => {
       for(let store of data.stores) {        
         const storeId = generateRandomU16();
         storeMap.set(store.id, storeId);
+        const storeStatus = store?.status ?? 0;
 
         const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
             [
@@ -582,7 +587,7 @@ describe("twine", () => {
         const dataString = JSON.stringify(compressedStore);
         //console.log('dataString: ', dataString);
         const tx = await program.methods
-        .createStore(storeId, 1, storeName.toLowerCase(), storeDescription.toLowerCase(), dataString)
+        .createStore(storeId, storeStatus, storeName.toLowerCase(), storeDescription.toLowerCase(), dataString)
         .accounts({
             store: mockStorePda,
             creator: creatorKeypair.publicKey,
@@ -598,7 +603,7 @@ describe("twine", () => {
 
         const createdStore = await program.account.store.fetch(mockStorePda);
         expect(createdStore.bump).is.equal(mockStorePdaBump);
-        expect(createdStore.status).is.equal(1);
+        expect(createdStore.status).is.equal(storeStatus);
         expect(createdStore.id).is.equal(storeId);
         expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
         expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
@@ -638,6 +643,7 @@ describe("twine", () => {
         const productPrice = product.price ?? 0;
         const productInventory = product.inventory ?? 0;
         const productRedemptionType = product.redemptionType ?? 0;
+        const productStatus = product?.status ?? 0;
 
         const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
           [
@@ -654,7 +660,7 @@ describe("twine", () => {
         if(mockStoreId){
           tx = await program.methods
                 .createStoreProduct(mockProductId,
-                    1,
+                    productStatus,
                     //productMintDecimals,
                     new BN(productPrice), 
                     new BN(productInventory),
@@ -676,7 +682,7 @@ describe("twine", () => {
         else {
           tx = await program.methods
                 .createProduct(mockProductId, 
-                    1,
+                    productStatus,
                     //productMintDecimals,
                     new BN(productPrice), 
                     new BN(productInventory),
@@ -715,7 +721,7 @@ describe("twine", () => {
 
         const createdProduct = await program.account.product.fetch(mockProductPda);
         expect(createdProduct.bump).is.equal(mockProductPdaBump);
-        expect(createdProduct.status).is.equal(1);
+        expect(createdProduct.status).is.equal(productStatus);
         expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
         expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
         expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthority);
