@@ -3,7 +3,7 @@ import { Program } from "@project-serum/anchor";
 import { Twine } from "../target/types/twine";
 import {PublicKey, Keypair, sendAndConfirmTransaction} from "@solana/web3.js";
 import { assert, expect } from "chai";
-import { bytes, rpc } from "@project-serum/anchor/dist/cjs/utils";
+import { bytes, publicKey, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
 import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAccount} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
@@ -372,7 +372,7 @@ describe("twine", () => {
     expect(createdProduct.isSnapshot).is.equal(false); 
     //expect(createdProduct.mint).is.eql(loneProductMintPda);
     expect(createdProduct.payTo).is.eql(secondaryAuthority);
-    expect(createdProduct.store).is.eql(null); 
+    expect(createdProduct.store).is.eql(PublicKey.default); 
     expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
     expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
     expect(createdProduct.redemptionType).is.equal(redemptionType);
@@ -539,8 +539,9 @@ describe("twine", () => {
     expect(updatedProduct.id).is.equal(loneProductId);
     expect(updatedProduct.tag.toNumber()).is.equal(0); 
     //expect(updatedProduct.mint).is.eql(loneProductMintPda);
+    expect(updatedProduct.usableSnapshot).is.eql(PublicKey.default);
     expect(updatedProduct.payTo).is.eql(secondaryAuthority);
-    expect(updatedProduct.store).is.equal(null); 
+    expect(updatedProduct.store).is.eql(PublicKey.default); 
     expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
     expect(updatedProduct.inventory.toNumber()).is.equal(updatedInventory);
     expect(updatedProduct.redemptionType).is.equal(updatedRedemptionType);
@@ -590,7 +591,9 @@ describe("twine", () => {
         })
         .transaction();
 
-        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);     
+        const response = await anchor.web3
+          .sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair])
+          .catch(err=>console.log(err));     
         loadedStores++;
 
         const createdStore = await program.account.store.fetch(mockStorePda);
@@ -697,12 +700,16 @@ describe("twine", () => {
         tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
         tx.partialSign(creatorKeypair);
         
-        const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
-          tx.serialize({
-              requireAllSignatures: true,
-              verifySignatures: true,
-              
-          }), {skipPreflight: true, commitment: 'confirmed'});
+        const txid = await anchor.web3
+          .sendAndConfirmRawTransaction(provider.connection, 
+            tx.serialize({
+                requireAllSignatures: true,
+                verifySignatures: true,
+                
+            }), 
+            {skipPreflight: true, commitment: 'confirmed'}
+          )
+          .catch(err=>console.log(err));
 
         loadedProducts++;
 
@@ -716,7 +723,7 @@ describe("twine", () => {
         expect(createdProduct.tag.toNumber()).is.equal(0); 
         //expect(createdProduct.mint).is.eql(mockProductMintKeypair.publicKey);
         expect(createdProduct.payTo).is.eql(secondaryAuthority);
-        expect(createdProduct.store).is.eql(mockStoreId ? mockStorePda : null); 
+        expect(createdProduct.store).is.eql(mockStoreId ? mockStorePda : PublicKey.default); 
         expect(createdProduct.price.toNumber()).is.equal(productPrice);
         expect(createdProduct.inventory.toNumber()).is.equal(productInventory);
         expect(createdProduct.redemptionType).is.equal(productRedemptionType);

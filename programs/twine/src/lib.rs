@@ -4,7 +4,7 @@ use anchor_spl::{
 };
 
 
-declare_id!("FWMbq7gdPD2nYH1gndgtZS8C1Tp4pzLXTRxQ9R61AhHZ");
+declare_id!("6snwfnAMf7dwgbwkJc8JuKdnHTRxGr3wRvjVVTevyHsY");
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
@@ -110,8 +110,9 @@ pub mod twine {
         product.id = id;
         product.tag = 0;
         //product.mint = ctx.accounts.mint.key();
+        product.usable_snapshot = Pubkey::default();
         product.pay_to = ctx.accounts.pay_to.key();
-        product.store = None;
+        product.store = Pubkey::default();
         product.price = price;
         product.inventory = inventory;
         product.redemption_type = redemption_type;
@@ -145,8 +146,9 @@ pub mod twine {
         product.id = id;
         product.tag = 0;
         //product.mint = ctx.accounts.mint.key();
+        product.usable_snapshot = Pubkey::default();
         product.pay_to = ctx.accounts.pay_to.key();
-        product.store = Some(store.key());
+        product.store = store.key();
         product.price = price;
         product.inventory = inventory;
         product.redemption_type = redemption_type;
@@ -614,7 +616,7 @@ pub struct Store{
 //pub const PRODUCT_SKU_SIZE: usize = 4+25;
 pub const PRODUCT_NAME_SIZE: usize = 4+100;
 pub const PRODUCT_DESCRIPTION_SIZE: usize = 4+200;
-pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + (1+32) + 32 + (1+32) + 8 + 8 + 1 + PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
+pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + 32 + 32 + 32 + 8 + 8 + 1 + PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
 
 #[account]
 pub struct Product{
@@ -627,10 +629,10 @@ pub struct Product{
     pub id: u32, //4; unique store id used as part of the PDA seed 
     pub tag: u64, //8; used for misc. tagging for simplifying queries. bitmasking maybe?    
     pub is_snapshot: bool, //1;
-    pub usable_snapshot: Option<Pubkey>, //1+32; set to None on product changes. On buys, if it's none, take a snapshot, otherwise use the existing snapshot
+    pub usable_snapshot: Pubkey, //32; default to all zeros for none. Option<> doesn't work. On buys, if it's none, take a snapshot, otherwise use the existing snapshot
     //pub mint: Pubkey, //32; used to mint a product token to the buyer
     pub pay_to: Pubkey, //32; where payments should be sent. can be different than the authority
-    pub store: Option<Pubkey>, //1+32; address of store PDA. maybe set to default Pubkey and save a byte?
+    pub store: Pubkey, //32; address of store PDA. maybe set to default Pubkey and save a byte?
     pub price: u64, //8; price of product. needs to be stable, but stablecoins can die, so most likely lamports since they'll be around as long as Solana is
     pub inventory: u64, //8;
     pub redemption_type: u8, //1;
