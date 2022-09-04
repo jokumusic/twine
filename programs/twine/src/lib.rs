@@ -165,6 +165,10 @@ pub mod twine {
     pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, redemption_type: u8,
         name: String, description: String, data: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
+        
+        if product.is_snapshot {
+            return Err(ErrorCode::UnableToModifySnapshot.into());
+        }
 
         product.status = status;
         product.price = price;
@@ -203,6 +207,10 @@ pub mod twine {
             return Err(ErrorCode::PriceIsGreaterThanPayment.into());
         }
 
+        if product.is_snapshot {
+            return Err(ErrorCode::UnableToPurchaseSnapshot.into());
+        }
+        
         msg!("purchase ticket has {} lamports and total price is {} (quantity={}, price={})",
              purchase_ticket_lamports,
              total_purchase_price,
@@ -744,7 +752,11 @@ pub enum ErrorCode {
     #[msg("product is not active")]
     ProductIsNotActive,
     #[msg("store is not active")]
-    StoreIsNotActive
+    StoreIsNotActive,
+    #[msg("modifying snapshots is not allowed")]
+    UnableToModifySnapshot,
+    #[msg("purchasing snapshots is not allowed")]
+    UnableToPurchaseSnapshot,
 }
 
 impl ProgramMetadata {
