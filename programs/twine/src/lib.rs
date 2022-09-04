@@ -170,6 +170,14 @@ pub mod twine {
             return Err(ErrorCode::UnableToModifySnapshot.into());
         }
 
+        if name.len() > PRODUCT_NAME_SIZE {
+            return Err(ErrorCode::NameIsTooLong.into());
+        }
+
+        if description.len() > PRODUCT_DESCRIPTION_SIZE {
+            return Err(ErrorCode::DescriptionIsTooLong.into());
+        }
+
         product.status = status;
         product.price = price;
         product.redemption_type = redemption_type;
@@ -598,9 +606,9 @@ pub struct ProgramMetadata {
 }
 
 
-pub const STORE_NAME_SIZE: usize = 4+100;
-pub const STORE_DESCRIPTION_SIZE: usize = 4+200;
-pub const STORE_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 2 + 8 + 8 + STORE_NAME_SIZE + STORE_DESCRIPTION_SIZE + 4;
+pub const STORE_NAME_SIZE: usize = 100;
+pub const STORE_DESCRIPTION_SIZE: usize = 200;
+pub const STORE_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 2 + 8 + 8 + (4+STORE_NAME_SIZE) + (4+STORE_DESCRIPTION_SIZE) + 4;
 
 #[account]
 pub struct Store{
@@ -627,9 +635,9 @@ pub struct Store{
 
 
 //pub const PRODUCT_SKU_SIZE: usize = 4+25;
-pub const PRODUCT_NAME_SIZE: usize = 4+100;
-pub const PRODUCT_DESCRIPTION_SIZE: usize = 4+200;
-pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + 32 + 32 + 32 + 8 + 8 + 1 + PRODUCT_NAME_SIZE + PRODUCT_DESCRIPTION_SIZE + 4;
+pub const PRODUCT_NAME_SIZE: usize = 100;
+pub const PRODUCT_DESCRIPTION_SIZE: usize = 200;
+pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + 32 + 32 + 32 + 8 + 8 + 1 + (4+PRODUCT_NAME_SIZE) + (4+PRODUCT_DESCRIPTION_SIZE) + 4;
 
 #[account]
 pub struct Product{
