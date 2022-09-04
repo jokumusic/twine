@@ -238,7 +238,7 @@ describe("twine", () => {
   it("Create Store Product", async () => {    
     //const productMintDecimals = 3;
     const data = JSON.stringify({displayName: productName, displayDescription: productDescription});
-    const redemptionType = 0;
+    const redemptionType = 1;
     const productStatus = 0;
 
     const tx = await program.methods
@@ -309,7 +309,7 @@ describe("twine", () => {
     const updatedProductPrice = 200000;
     const updatedProductInventory = 2;
     const updatedProductData = JSON.stringify({displayName: updatedProductName, displayDescription: updatedProductDescription});
-    const updatedRedemptionType = 1;
+    const updatedRedemptionType = 2;
 
     //this should succeed because the owner is correct
     const txSuccess = await program.methods
@@ -641,7 +641,7 @@ describe("twine", () => {
         const productDescription = product.displayDescription;
         const productPrice = product.price ?? 0;
         const productInventory = product.inventory ?? 0;
-        const productRedemptionType = product.redemptionType ?? 0;
+        const productRedemptionType = product.redemptionType ?? 1;
         const productStatus = product?.status ?? 0;
 
         const [mockStorePda, mockStorePdaBump] = PublicKey.findProgramAddressSync(
