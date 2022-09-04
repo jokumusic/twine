@@ -92,7 +92,7 @@
 			"inventory": 25,
 			"price": 8,
 			"rating": 2,
-			"redemptionType": 1,
+			"redemptionType": 6,
 			"status": 0
 		},
 		{
@@ -107,7 +107,7 @@
 			"inventory": 500,
 			"price": 2500,
 			"rating": 2,
-			"redemptionType": 0,
+			"redemptionType": 6,
 			"status": 0
 		},
 		{
@@ -122,7 +122,7 @@
 			"inventory": 1000,
 			"price": 25,
 			"rating": 5,
-			"redemptionType": 0,
+			"redemptionType": 6,
 			"status": 0
 		},
 		{
@@ -137,7 +137,7 @@
 			"inventory": 2000000,
 			"price": 1,
 			"rating": 3,
-			"redemptionType": 0,
+			"redemptionType": 1,
 			"status": 0
 		},
 		{
@@ -152,7 +152,7 @@
 			"inventory": 1,
 			"price": 20,
 			"rating": 5,
-			"redemptionType": 0,
+			"redemptionType": 6,
 			"status": 0
 		},
 		{
@@ -168,7 +168,7 @@
 			"displayDescription": "This ticket is good for entry at Solana Breakpoint 2022!",
 			"inventory": 10000,
 			"price": 1000,
-			"redemptionType": 1,
+			"redemptionType": 2,
 			"status": 0
 		},
 		{
@@ -183,8 +183,8 @@
 			"displayDescription": "The real stuff just tastes better...",
 			"inventory": 250,
 			"price": 4,
-			"rating": 5,
-			"redemptionType": 0,
+			"rating": 4,
+			"redemptionType": 2,
 			"status": 0
 		}
 	]
