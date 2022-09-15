@@ -5,10 +5,12 @@ import {PublicKey, Keypair, sendAndConfirmTransaction} from "@solana/web3.js";
 import { assert, expect } from "chai";
 import { bytes, publicKey, rpc } from "@project-serum/anchor/dist/cjs/utils";
 import { BN } from "bn.js";
-import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAccount} from "@solana/spl-token";
+import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAccount, getOrCreateAssociatedTokenAccount, Account} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
 import * as data from './data.json';
-import { compress, decompress, trimUndefined, trimUndefinedRecursively } from 'compress-json'
+import { compress, decompress, trimUndefined, trimUndefinedRecursively } from 'compress-json';
+import * as tokenFaucetIdl from "./tokenfaucet.json";
+import type { Tokenfaucet }  from "./tokenfaucet.ts";
 
 const generateRandomU16 = () => {
   return Math.floor(Math.random() * Math.pow(2,16));
@@ -35,9 +37,9 @@ const toBytes = (data, type) =>
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
 const creatorKeypair = Keypair.generate();
-const secondaryAuthority = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
-const creatorAccountLamportsRequired = 250_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
-const paytoAccountLamportsRequired = 40_000_000; //funds transferred from creatorAccount
+const secondaryAuthority = Keypair.generate().publicKey; //new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
+const creatorAccountLamportsRequired = 150_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
+const paymentTokensRequired = 5;
 
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
@@ -46,7 +48,9 @@ console.log('creator pubkey: ', creatorKeypair.publicKey.toBase58());
 
 
 describe("twine", () => {
-  const program = anchor.workspace.Twine as Program<Twine>;
+  const program = anchor.workspace.Twine as Program<Twine>;  
+  const tokenFaucetProgram = new anchor.Program(tokenFaucetIdl, new PublicKey(tokenFaucetIdl.metadata.address), provider) as anchor.Program<Tokenfaucet>;
+
   const storeId = generateRandomU16();
   const storeName = "test-store";
   const storeDescription = "test-store description";
@@ -55,7 +59,7 @@ describe("twine", () => {
   const loneProductId = generateRandomU32();
   const productName = "test-product";
   const productDescription = "test-product-description";
-  const productPrice = new BN(100000);
+  const productPrice = new BN(1);
   const productInventory = new BN(5);
 
   let [programMetadataPda, programMetadataPdaBump] = PublicKey.findProgramAddressSync(
@@ -80,23 +84,15 @@ describe("twine", () => {
       creatorKeypair.publicKey.toBuffer(),
       Buffer.from(uIntToBytes(loneProductId,4,"setUint"))
     ], program.programId);
+  let [paymentTokenMintAddress, paymentTokenMintAddressBump] = PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode("mint"),
+    ], tokenFaucetProgram.programId);
 
-  /*
-  let [storeProductMintPda, storeProductMintPdaBump] = PublicKey.findProgramAddressSync(
-      [
-        anchor.utils.bytes.utf8.encode("mint"),
-        storeProductPda.toBuffer(),
-      ], program.programId);
-
-  let [loneProductMintPda, loneProductMintPdaBump] = PublicKey.findProgramAddressSync(
-      [
-        anchor.utils.bytes.utf8.encode("mint"),
-        loneProductPda.toBuffer(),
-      ], program.programId);
-  */
 
   before(() => {
     return new Promise<void>(async (resolve,reject) => {
+
       console.log(`funding creator account with ${creatorAccountLamportsRequired} lamports...`);
       
       const airdropSignature = await provider.connection
@@ -112,27 +108,6 @@ describe("twine", () => {
 
       if(!airdropConfirmation)
         return;
-      
-      /*
-      console.log(`funding pay_to account with ${paytoAccountLamportsRequired} lamports...`);
-      const transfer_tx = new anchor.web3.Transaction().add(
-          anchor.web3.SystemProgram.transfer({
-            fromPubkey: creatorKeypair.publicKey,
-            toPubkey: paytoKeypair.publicKey,
-            lamports: paytoAccountLamportsRequired,
-          })
-      );
-
-      transfer_tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-      transfer_tx.feePayer = creatorKeypair.publicKey;
-
-      const transfer_results = await anchor.web3
-      .sendAndConfirmTransaction(provider.connection, transfer_tx, [creatorKeypair], {commitment: 'confirmed'})
-      .catch(reject);
-
-      if(!transfer_results)
-        return;
-      */
 
       resolve();
     });
@@ -261,6 +236,7 @@ describe("twine", () => {
     tx.feePayer = creatorKeypair.publicKey;
     tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
     tx.partialSign(creatorKeypair); //this is where the wallet would be called to sign the transaction
+
     
     const txid = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
       tx.serialize({ requireAllSignatures: true, verifySignatures: true }), 
@@ -396,16 +372,56 @@ describe("twine", () => {
   });
 
 
+  it("Create and fund buyer ATA for payment token", async()=>{
+
+    const creatorPaymentTokenAta = await spl_token.getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      creatorKeypair,
+      paymentTokenMintAddress,
+      creatorKeypair.publicKey,
+      false,
+      'confirmed',
+      {commitment:'confirmed'},
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID);
+
+      console.log('buyer token account: ', creatorPaymentTokenAta.address.toBase58());
+      expect(creatorPaymentTokenAta.mint).is.eql(paymentTokenMintAddress);
+      expect(creatorPaymentTokenAta.owner).is.eql(creatorKeypair.publicKey);
+      expect(creatorPaymentTokenAta.amount).is.equal(BigInt(0));
+
+      console.log(`funding creator payment account with ${paymentTokensRequired} tokens from mint ${paymentTokenMintAddress}`);
+      const paymentTokenAirdropTx = await tokenFaucetProgram.methods
+        .executeAirdrop(new anchor.BN(paymentTokensRequired))
+        .accounts({
+          signer: creatorKeypair.publicKey,
+          mint: paymentTokenMintAddress,
+          recipient: creatorPaymentTokenAta.address,
+        })
+        .transaction();
+
+
+      const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, paymentTokenAirdropTx, [creatorKeypair]);
+      const updatedCreatorPaymentTokenAta = await spl_token.getAccount(provider.connection, creatorPaymentTokenAta.address, 'confirmed', TOKEN_PROGRAM_ID);
+      expect(updatedCreatorPaymentTokenAta.mint).is.eql(paymentTokenMintAddress);
+      expect(updatedCreatorPaymentTokenAta.owner).is.eql(creatorKeypair.publicKey);
+      expect(updatedCreatorPaymentTokenAta.amount).is.equal(BigInt(paymentTokensRequired));
+
+  });
+
+
   it("Buy Lone Product", async () => {
     let buyForPubkey = creatorKeypair.publicKey;
-    //let buyForAta = await spl_token.getAssociatedTokenAddress(
-    //  loneProductMintPda,
-    //  buyForPubkey,
-    //);
 
     const loneProduct = await program.account.product.fetch(loneProductPda);
+    const payerAtaAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, creatorKeypair.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+    const payToAtaAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, loneProduct.payTo, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
     const quantity = 1;
     const nonce = generateRandomU16();
+
+    console.log('payer ATA address: ', payerAtaAddress.toBase58());
+    console.log('payTo ATA address: ', payToAtaAddress.toBase58());
+    
 
     const [productSnapshotMetadataPda, productSnapshotMetadataPdaBump] = PublicKey.findProgramAddressSync(
       [
@@ -429,36 +445,85 @@ describe("twine", () => {
         Buffer.from(uIntToBytes(nonce,2,"setUint"))
       ], program.programId);
 
-    const transferToPurchaseTicketIx = anchor.web3.SystemProgram.transfer({
-      fromPubkey: creatorKeypair.publicKey,
-      toPubkey: purchaseTicketPda,
-      lamports: 20_000_000
-    });
+   
+    const purchaseTicketAtaAddress = await spl_token.getAssociatedTokenAddress(
+      paymentTokenMintAddress,
+      purchaseTicketPda,
+      true,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID);
+
+    console.log('purchaseTicketAtaAddress: ', purchaseTicketAtaAddress.toBase58());
+
+    const createPurchaseTicketAtaIx = spl_token.createAssociatedTokenAccountInstruction(
+      creatorKeypair.publicKey,
+      purchaseTicketAtaAddress,
+      purchaseTicketPda,
+      paymentTokenMintAddress,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID);
+
+      
+    const transferToPurchaseTicketAtaIx = spl_token.createTransferInstruction(
+      payerAtaAddress,
+      purchaseTicketAtaAddress,
+      creatorKeypair.publicKey,
+      loneProduct.price.toNumber(),
+      [],
+      TOKEN_PROGRAM_ID,
+    );
+
+    let payToAta: Account;
+    try {
+      payToAta = await spl_token.getAccount(provider.connection, payToAtaAddress, 'confirmed', TOKEN_PROGRAM_ID);
+    } catch(ex) {
+    }
+
 
     const buyProductIx = await program.methods
-      .buyProduct(nonce, new BN(quantity), loneProduct.price)
+      .buyProduct(nonce, new anchor.BN(quantity), loneProduct.price)
       .accounts({
-        //mint: loneProduct.mint,
         product: loneProductPda,
         productSnapshotMetadata: productSnapshotMetadataPda,
         productSnapshot: productSnapshotPda,
         buyer: creatorKeypair.publicKey,
         buyFor: secondaryAuthority,
-        payTo: secondaryAuthority,
+        payTo: loneProduct.payTo,
+        payToTokenAccount: payToAtaAddress,
         purchaseTicket: purchaseTicketPda,
-        //clock: SYSVAR_CLOCK_PUBKEY,
+        purchaseTicketPayment: purchaseTicketAtaAddress,
+        purchaseTicketPaymentMint: paymentTokenMintAddress,
       })
       .instruction();
 
     const tx = new anchor.web3.Transaction()
-    .add(transferToPurchaseTicketIx)
-    .add(buyProductIx);
+    .add(createPurchaseTicketAtaIx)
+    .add(transferToPurchaseTicketAtaIx);
+
+    if(!payToAta) {
+      console.log("payTo ATA doesn't exist. adding instruction to create it");
+      const createPayToAtaIx = spl_token.createAssociatedTokenAccountInstruction(
+        creatorKeypair.publicKey,
+        payToAtaAddress,
+        loneProduct.payTo,
+        paymentTokenMintAddress,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID);
+      
+      tx.add(createPayToAtaIx);
+    } else {
+      console.log('payTo ATA: ', payToAta.address.toBase58());
+    }
+
+    tx.add(buyProductIx);
 
     tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
     tx.feePayer = creatorKeypair.publicKey;  
 
     const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
 
+    console.log('transaction signature: ', response);
+    
     const productSnapshot = await program.account.product.fetch(productSnapshotPda);
     expect(productSnapshot.bump).is.equal(loneProduct.bump);
     expect(productSnapshot.status).is.equal(loneProduct.status);
@@ -510,6 +575,7 @@ describe("twine", () => {
     //expect(buyForAccount.amount).is.equal(BigInt(quantity));
     //expect(buyForAccount.owner).is.eql(creatorKeypair.publicKey);
     //expect(buyForAccount.mint).is.eql(loneProduct.mint);
+    
   });
 
 
@@ -553,7 +619,7 @@ describe("twine", () => {
     expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
     expect(updatedProduct.data).is.equal(updatedData);
   });
-
+/*
   describe("Mock Data", ()=>{      
     const storeMap = new Map<string,number>();
 
@@ -741,6 +807,6 @@ describe("twine", () => {
     }); //load products
 
   }); //mock data 
-
+*/
 
 });

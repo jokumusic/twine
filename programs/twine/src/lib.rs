@@ -1,10 +1,18 @@
 use anchor_lang::{prelude::*, solana_program::clock::Clock};
 use anchor_spl::{
-    token::{ Token }
+    token,
+    token::{Token,TokenAccount,Mint},
 };
 
 
-declare_id!("DHvX2ufjEgriS4u9QkTTZ4XLkz9i3EkBVmGK2fZpHnF");
+pub mod payment_token {
+    use super::*;
+    declare_id!("CuGVj8PmPgZUJA83TFVmQCS1HgkTvPUcdv1TR6WebEsY");
+}
+
+
+declare_id!("12TFQykZWEuTbWPQfpFpRqEDgbqqn7ZMDFHshSFjPACK");
+
 
 const PROGRAM_VERSION: u8 = 0;
 const STORE_VERSION : u8 = 0;
@@ -18,7 +26,6 @@ const PRODUCT_SEED_BYTES : &[u8] = b"product";
 const PRODUCT_SNAPSHOT_METADATA_BYTES: &[u8] = b"product_snapshot_metadata";
 const PRODUCT_SNAPSHOT_BYTES: &[u8] = b"product_snapshot";
 const PURCHASE_TICKET_BYTES : &[u8] = b"purchase_ticket";
-//const PRODUCT_MINT_BYTES : &[u8] = b"mint";
 
 
 #[program]
@@ -190,19 +197,28 @@ pub mod twine {
     }    
 
     //keep this simple for now, but look at including snapshots on purchases
-    pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16,
-         quantity: u64, agreed_price: u64) -> Result<()>{
-        
+    pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
+           
         let product = &mut ctx.accounts.product;
         let buyer = &mut ctx.accounts.buyer;        
         let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
         let product_snapshot = &mut ctx.accounts.product_snapshot;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
+        let purchase_ticket_payment = &mut ctx.accounts.purchase_ticket_payment;
         let pay_to = &ctx.accounts.pay_to;
-        let purchase_ticket_lamports = **purchase_ticket.to_account_info().try_borrow_lamports()?;
-        let clock = Clock::get()?;
-        let total_purchase_price = product.price * quantity;      
+        let pay_to_token_account = &ctx.accounts.pay_to_token_account;
+        let token_program = &ctx.accounts.token_program;        
+        let clock = Clock::get()?;        
+ 
+        let total_purchase_price = product.price * quantity;  
         
+        msg!("purchase ticket payment has {} USDC and total price is {} (quantity={}, price={})",
+             purchase_ticket_payment.amount,
+             total_purchase_price,
+             quantity,
+             product.price);        
+     
+     
         if product.status != 0 {
             return Err(ErrorCode::ProductIsNotActive.into());
         }
@@ -219,39 +235,40 @@ pub mod twine {
             return Err(ErrorCode::UnableToPurchaseSnapshot.into());
         }
         
-        msg!("purchase ticket has {} lamports and total price is {} (quantity={}, price={})",
-             purchase_ticket_lamports,
-             total_purchase_price,
-             quantity,
-             product.price);
-
-        if total_purchase_price > purchase_ticket_lamports {
+        
+        if total_purchase_price > purchase_ticket_payment.amount {
             return Err(ErrorCode::InsufficientFunds.into());
         }        
             
         require_keys_eq!(pay_to.key(), product.pay_to.key());
-
-        msg!("purchase_ticket lamports: {}, pay_to lamports: {}", 
-        **purchase_ticket.to_account_info().try_borrow_lamports()?,
-        **pay_to.to_account_info().try_borrow_lamports()?);
-
-        let from = &mut purchase_ticket.to_account_info();
-        let post_from = from
-            .lamports()
-            .checked_sub(total_purchase_price)
-            .ok_or(ErrorCode::UnableToDeductFromBuyerAccount)?;
-        let post_to = pay_to
-            .lamports()
-            .checked_add(total_purchase_price)
-            .ok_or(ErrorCode::UnableToAddToPayToAccount)?;
+   
+        let purchase_ticket_seed_bump = *ctx.bumps.get("purchase_ticket").unwrap();
+        let product_snapshot_metadata_key = product_snapshot_metadata.key();
+        let buyer_key = buyer.key();
         
-        **from.try_borrow_mut_lamports().unwrap() = post_from;
-        **pay_to.try_borrow_mut_lamports().unwrap() = post_to;
+        let purchase_ticket_seeds = &[
+            PURCHASE_TICKET_BYTES,
+            product_snapshot_metadata_key.as_ref(),
+            buyer_key.as_ref(),
+            &_nonce.to_be_bytes(), 
+            &[purchase_ticket_seed_bump]
+        ];
 
-        msg!("remaining purchase_ticket lamports: {}, pay_to lamports: {}", 
-            **purchase_ticket.to_account_info().try_borrow_lamports()?,
-            **pay_to.to_account_info().try_borrow_lamports()?);
+        let payment_transfer_signer = &[&purchase_ticket_seeds[..]];
 
+        let payment_transfer_accounts = anchor_spl::token::Transfer {
+            from: purchase_ticket_payment.to_account_info(),
+            to: pay_to_token_account .to_account_info(),
+            authority: purchase_ticket.to_account_info(), //ata owned by twine program
+        };
+
+        let payment_transfer_cpicontext = CpiContext::new_with_signer(
+    token_program.to_account_info(),
+            payment_transfer_accounts,
+            payment_transfer_signer,        
+        );
+
+        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, product.price)?;
 
         product_snapshot_metadata.bump = *ctx.bumps.get("product_snapshot_metadata").unwrap();
         product_snapshot_metadata.version = PRODUCT_SNAPSHOT_METADATA_VERSION;
@@ -282,30 +299,6 @@ pub mod twine {
 
         product.inventory -= quantity;
 
-        /*
-        let token_program = ctx.accounts.token_program.to_account_info();
-        let mint_to_accounts = MintTo {
-            mint: ctx.accounts.mint.to_account_info(),
-            to: ctx.accounts.buy_for.to_account_info(),
-            authority: ctx.accounts.mint.to_account_info(),
-        };
-    
-        let mint_bump = *ctx.bumps.get("mint").unwrap();
-
-        mint_to(
-            CpiContext::new_with_signer(
-                token_program, 
-                mint_to_accounts, 
-                &[&[
-                    PRODUCT_MINT_BYTES,
-                    product.key().as_ref(),
-                    &[mint_bump]
-                ]]
-            ), 
-            quantity
-        )?;
-        */
-       
         Ok(())
     }
 
@@ -510,15 +503,6 @@ pub struct UpdateProduct<'info> {
 #[derive(Accounts)]
 #[instruction(_nonce: u16)]
 pub struct BuyProduct<'info> {
-    /*
-    #[account(
-        mut,
-        seeds=[PRODUCT_MINT_BYTES, product.key().as_ref()],
-        bump,
-        address=product.mint.key()
-    )]
-    pub mint: Account<'info, Mint>,
-    */
 
     #[account(
         mut,
@@ -539,7 +523,7 @@ pub struct BuyProduct<'info> {
         ],
         bump
     )]
-    pub product_snapshot_metadata: Account<'info, ProductSnapshotMetadata>,
+    pub product_snapshot_metadata: Box<Account<'info, ProductSnapshotMetadata>>,
 
     #[account(
         init,
@@ -548,8 +532,7 @@ pub struct BuyProduct<'info> {
         seeds=[PRODUCT_SNAPSHOT_BYTES, product_snapshot_metadata.key().as_ref()], 
         bump
     )]
-    pub product_snapshot: Box<Account<'info, Product>>,    
-
+    pub product_snapshot: Box<Account<'info, Product>>,
 
     #[account(
         init,
@@ -563,33 +546,41 @@ pub struct BuyProduct<'info> {
             &_nonce.to_be_bytes()], 
         bump
     )]
-    pub purchase_ticket: Account<'info, PurchaseTicket>,
+    pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
 
-    /// CHECK: doesn't much need validation
     #[account(
         mut,
-        constraint=pay_to.key() == product.pay_to.key())
-    ]
-    pub pay_to: AccountInfo<'info>, //validate pay_to == product.pay_to
-    
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = purchase_ticket,
+    )]
+    pub purchase_ticket_payment: Account<'info, TokenAccount>,
+
+    #[account(address = crate::payment_token::ID)]
+    pub purchase_ticket_payment_mint: Account<'info, Mint>,
+
+    #[account(
+        //init_if_needed,
+        //payer=buyer,
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = pay_to,
+    )]
+    pub pay_to_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: we good
+    #[account(address = product.pay_to.key())]
+    pub pay_to: AccountInfo<'info>,
+   
     #[account(mut)]
     pub buyer: Signer<'info>,
 
-    //#[account(
-        //init_if_needed,
-        //payer = buyer,
-        //associated_token::mint = mint,
-        //associated_token::authority = buyer,
-
     /// CHECK: doesn't much need validation  
     #[account(owner=system_program.key())] 
-    pub buy_for: AccountInfo<'info>,  //, TokenAccount>,
+    pub buy_for: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
-    //pub token_program: Program<'info, Token>,
-    //pub associated_token_program: Program<'info, AssociatedToken>,
-    //pub rent: Sysvar<'info, Rent>,
-    //pub clock: Sysvar<'info, Clock>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 
