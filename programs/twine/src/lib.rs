@@ -7,7 +7,7 @@ use anchor_spl::{
 
 pub mod payment_token {
     use super::*;
-    declare_id!("CuGVj8PmPgZUJA83TFVmQCS1HgkTvPUcdv1TR6WebEsY");
+    declare_id!("9XTvSrAKUcXgwHusxeEpxdrKvTUuCc5EdDG76zzRy9pT");
 }
 
 
