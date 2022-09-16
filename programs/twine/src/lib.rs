@@ -7,11 +7,11 @@ use anchor_spl::{
 
 pub mod payment_token {
     use super::*;
-    declare_id!("9XTvSrAKUcXgwHusxeEpxdrKvTUuCc5EdDG76zzRy9pT");
+    declare_id!("F6g9cmPtNAec9GYBF4s9vtX6hCE9eUxnFcv3bL8WsNuj");
 }
 
 
-declare_id!("12TFQykZWEuTbWPQfpFpRqEDgbqqn7ZMDFHshSFjPACK");
+declare_id!("DHvX2ufjEgriS4u9QkTTZ4XLkz9i3EkBVmGK2fZpHnF");
 
 
 const PROGRAM_VERSION: u8 = 0;
