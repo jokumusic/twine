@@ -34,7 +34,7 @@ const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
 pub mod twine {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, fee: u64) -> Result<()> {
         let program_metadata = &mut ctx.accounts.program_metadata;
         if program_metadata.initialized {
             return Err(ErrorCode::AlreadyInitialized.into());
@@ -47,7 +47,13 @@ pub mod twine {
         program_metadata.authority = ctx.accounts.authority.key();
         program_metadata.secondary_authority = ctx.accounts.secondary_authority.key();
         program_metadata.fee_account = ctx.accounts.fee_account.key();
+        //program_metadata.fee = fee;
 
+        Ok(())
+    }
+
+    pub fn change_fee(ctx: Context<UpdateProgramMetadata>, _fee: u64) -> Result<()> {
+        //ctx.accounts.program_metadata.fee = fee;        
         Ok(())
     }
 
@@ -355,9 +361,9 @@ pub struct Initialize<'info> {
 pub struct UpdateProgramMetadata<'info> {
     #[account(
         mut,
-        has_one=authority,
-        //constraint= program_metadata.is_authorized(&authority.key),
-        seeds= [PROGRAM_METADATA_BYTES, program_metadata.creator.key().as_ref()],
+        //has_one=authority,
+        constraint= program_metadata.is_authorized(&authority.key),
+        seeds = [PROGRAM_METADATA_BYTES],
         bump= program_metadata.bump)]
     pub program_metadata: Account<'info, ProgramMetadata>,
     
@@ -373,7 +379,7 @@ pub struct ChangeFeeAccount<'info> {
 
     #[account(
         mut,
-        has_one=authority,
+        //has_one=authority,
         seeds = [PROGRAM_METADATA_BYTES],
         bump=program_metadata.bump
     )]
@@ -533,7 +539,7 @@ pub struct UpdateProduct<'info> {
         realloc = 8 + PRODUCT_SIZE + data.len(),
         realloc::payer = authority,
         realloc::zero = true,
-        has_one=authority,
+        //has_one=authority,
         seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()],  
         bump = product.bump
     )]
@@ -653,6 +659,7 @@ pub struct ProgramMetadata {
     pub authority: Pubkey, //32;
     pub secondary_authority: Pubkey, //32;
     pub fee_account: Pubkey, //32;
+    //pub fee: u64, //8;
 }
 
 

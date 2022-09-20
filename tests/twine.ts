@@ -11,6 +11,7 @@ import * as data from './data.json';
 import { compress, decompress, trimUndefined, trimUndefinedRecursively } from 'compress-json';
 import * as tokenFaucetIdl from "./tokenfaucet.json";
 import type { Tokenfaucet }  from "./tokenfaucet.ts";
+import TransactionFactory from "@project-serum/anchor/dist/cjs/program/namespace/transaction";
 
 const generateRandomU16 = () => {
   return Math.floor(Math.random() * Math.pow(2,16));
@@ -39,6 +40,7 @@ const PURCHASE_TRANSACTION_FEE = 10000;
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
 const creatorKeypair = Keypair.generate();
+const storeSecondaryAuthorityKeypair = Keypair.generate();
 const secondaryAuthorityPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
 const feeAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
 const payToAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
@@ -113,6 +115,21 @@ describe("twine", () => {
       if(!airdropConfirmation)
         return;
 
+      console.log('transferring funds to store secondary authority');
+      const lamportTransferTx = new anchor.web3.Transaction();
+      lamportTransferTx.add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: creatorKeypair.publicKey,
+          toPubkey: storeSecondaryAuthorityKeypair.publicKey,
+          lamports: 2000000
+        })
+      );
+    
+      const  lamportTransferSig = await provider.connection.sendTransaction(lamportTransferTx, [creatorKeypair])
+      const transferConfirmation = await provider.connection
+      .confirmTransaction(lamportTransferSig,'finalized')
+      .catch(reject);
+
       resolve();
     });
   });
@@ -127,7 +144,7 @@ describe("twine", () => {
     }
 
     const tx = await program.methods
-    .initialize()
+    .initialize(new anchor.BN(PURCHASE_TRANSACTION_FEE))
     .accounts({
       programMetadata: programMetadataPda,
       creator: creatorKeypair.publicKey,
@@ -145,7 +162,7 @@ describe("twine", () => {
     expect(programMetadata.version).is.equal(0);
     expect(programMetadata.creator).is.eql(creatorKeypair.publicKey);
     expect(programMetadata.authority).is.eql(provider.publicKey);
-    expect(programMetadata.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(programMetadata.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
   });
 
@@ -186,7 +203,7 @@ describe("twine", () => {
       store: storePda,
       creator: creatorKeypair.publicKey,
       authority: creatorKeypair.publicKey,
-      secondaryAuthority: secondaryAuthorityPubkey,    
+      secondaryAuthority: storeSecondaryAuthorityKeypair.publicKey,    
     })
     .transaction();
 
@@ -198,7 +215,7 @@ describe("twine", () => {
     expect(createdStore.id).is.equal(storeId);
     expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
     expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
-    expect(createdStore.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
+    expect(createdStore.secondaryAuthority).is.eql(storeSecondaryAuthorityKeypair.publicKey);
     expect(createdStore.tag.toNumber()).is.equal(0);
     expect(createdStore.name).is.equal(storeName.toLowerCase());
     expect(createdStore.description).is.eql(storeDescription.toLowerCase());
@@ -230,7 +247,40 @@ describe("twine", () => {
     expect(updatedStore.status).is.equal(updatedStoreStatus);
     expect(updatedStore.creator).is.eql(creatorKeypair.publicKey);
     expect(updatedStore.authority).is.eql(creatorKeypair.publicKey);
-    expect(updatedStore.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
+    expect(updatedStore.secondaryAuthority).is.eql(storeSecondaryAuthorityKeypair.publicKey);
+    expect(updatedStore.id).is.equal(storeId);
+    expect(updatedStore.tag.toNumber()).is.equal(0);
+    expect(updatedStore.productCount.toNumber()).is.equal(0);  
+    expect(updatedStore.name).is.equal(updatedStoreName.toLowerCase());
+    expect(updatedStore.description).is.equal(updatedStoreDescription.toLowerCase());
+    expect(updatedStore.data).is.eql(data);
+
+  });
+
+
+  it("Update Store As Secondary Authority", async () => {
+    const updatedStoreName = storeName + "-updated-2";
+    const updatedStoreDescription = storeDescription + "-updated-2";
+    const updatedStoreStatus = 1;
+    const data = JSON.stringify({displayName: updatedStoreName, displayDescription: updatedStoreDescription});
+
+    //this should succeed because the owner is correct
+    const tx = await program.methods
+    .updateStore(updatedStoreStatus, updatedStoreName.toLowerCase(), updatedStoreDescription.toLowerCase(), data)
+    .accounts({
+      store: storePda,
+      authority: storeSecondaryAuthorityKeypair.publicKey,
+    })
+    .transaction();
+
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [storeSecondaryAuthorityKeypair]);
+
+    const updatedStore= await program.account.store.fetch(storePda);
+    expect(updatedStore.bump).is.equal(storePdaBump);
+    expect(updatedStore.status).is.equal(updatedStoreStatus);
+    expect(updatedStore.creator).is.eql(creatorKeypair.publicKey);
+    expect(updatedStore.authority).is.eql(creatorKeypair.publicKey);
+    expect(updatedStore.secondaryAuthority).is.eql(storeSecondaryAuthorityKeypair.publicKey);
     expect(updatedStore.id).is.equal(storeId);
     expect(updatedStore.tag.toNumber()).is.equal(0);
     expect(updatedStore.productCount.toNumber()).is.equal(0);  
