@@ -4,7 +4,6 @@ use anchor_spl::{
     token::{Token,TokenAccount,Mint},
 };
 
-
 pub mod payment_token {
     use super::*;
     declare_id!("F6g9cmPtNAec9GYBF4s9vtX6hCE9eUxnFcv3bL8WsNuj");
@@ -27,11 +26,14 @@ const PRODUCT_SNAPSHOT_METADATA_BYTES: &[u8] = b"product_snapshot_metadata";
 const PRODUCT_SNAPSHOT_BYTES: &[u8] = b"product_snapshot";
 const PURCHASE_TICKET_BYTES : &[u8] = b"purchase_ticket";
 
+const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
+//const GENERAL_TRANSACTION_FEE: u64 = 5000000; //.005; SOL coin has 9 decimals
+
 
 #[program]
 pub mod twine {
-
     use super::*;
+
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let program_metadata = &mut ctx.accounts.program_metadata;
         if program_metadata.initialized {
@@ -44,6 +46,13 @@ pub mod twine {
         program_metadata.creator = ctx.accounts.creator.key();
         program_metadata.authority = ctx.accounts.authority.key();
         program_metadata.secondary_authority = ctx.accounts.secondary_authority.key();
+        program_metadata.fee_account = ctx.accounts.fee_account.key();
+
+        Ok(())
+    }
+
+    pub fn change_fee_account(ctx: Context<ChangeFeeAccount>) -> Result<()> {
+        let program_metadata = &mut ctx.accounts.program_metadata;
         program_metadata.fee_account = ctx.accounts.fee_account.key();
 
         Ok(())
@@ -198,7 +207,7 @@ pub mod twine {
 
     //keep this simple for now, but look at including snapshots on purchases
     pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
-           
+
         let product = &mut ctx.accounts.product;
         let buyer = &mut ctx.accounts.buyer;        
         let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
@@ -207,7 +216,8 @@ pub mod twine {
         let purchase_ticket_payment = &mut ctx.accounts.purchase_ticket_payment;
         let pay_to = &ctx.accounts.pay_to;
         let pay_to_token_account = &ctx.accounts.pay_to_token_account;
-        let token_program = &ctx.accounts.token_program;        
+        let token_program = &ctx.accounts.token_program;       
+        let fee_token_account = &mut ctx.accounts.fee_token_account;
         let clock = Clock::get()?;        
  
         let total_purchase_price = product.price * quantity;  
@@ -233,10 +243,9 @@ pub mod twine {
 
         if product.is_snapshot {
             return Err(ErrorCode::UnableToPurchaseSnapshot.into());
-        }
+        }        
         
-        
-        if total_purchase_price > purchase_ticket_payment.amount {
+        if purchase_ticket_payment.amount < (total_purchase_price + PURCHASE_TRANSACTION_FEE) {
             return Err(ErrorCode::InsufficientFunds.into());
         }        
             
@@ -263,12 +272,26 @@ pub mod twine {
         };
 
         let payment_transfer_cpicontext = CpiContext::new_with_signer(
-    token_program.to_account_info(),
+            token_program.to_account_info(),
             payment_transfer_accounts,
             payment_transfer_signer,        
         );
 
         let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, product.price)?;
+
+        let fee_transfer_accounts = anchor_spl::token::Transfer {
+            from: purchase_ticket_payment.to_account_info(),
+            to: fee_token_account.to_account_info(),
+            authority: purchase_ticket.to_account_info(), //ata owned by twine program
+        };
+
+        let fee_transfer_cpicontext = CpiContext::new_with_signer(
+    token_program.to_account_info(),
+            fee_transfer_accounts,
+            payment_transfer_signer,        
+        );
+
+        let _fee_transfer_result = token::transfer(fee_transfer_cpicontext, PURCHASE_TRANSACTION_FEE)?;
 
         product_snapshot_metadata.bump = *ctx.bumps.get("product_snapshot_metadata").unwrap();
         product_snapshot_metadata.version = PRODUCT_SNAPSHOT_METADATA_VERSION;
@@ -323,6 +346,7 @@ pub struct Initialize<'info> {
     /// CHECK:
     pub secondary_authority: AccountInfo<'info>,
     /// CHECK:
+    #[account(owner=anchor_lang::system_program::ID)]
     pub fee_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -331,7 +355,8 @@ pub struct Initialize<'info> {
 pub struct UpdateProgramMetadata<'info> {
     #[account(
         mut,
-        constraint= program_metadata.is_authorized(&authority.key),
+        has_one=authority,
+        //constraint= program_metadata.is_authorized(&authority.key),
         seeds= [PROGRAM_METADATA_BYTES, program_metadata.creator.key().as_ref()],
         bump= program_metadata.bump)]
     pub program_metadata: Account<'info, ProgramMetadata>,
@@ -341,6 +366,27 @@ pub struct UpdateProgramMetadata<'info> {
     )]
     pub authority: Signer<'info>,
 }
+
+
+#[derive(Accounts)]
+pub struct ChangeFeeAccount<'info> {
+
+    #[account(
+        mut,
+        has_one=authority,
+        seeds = [PROGRAM_METADATA_BYTES],
+        bump=program_metadata.bump
+    )]
+    pub program_metadata: Account<'info, ProgramMetadata>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    /// CHECK:
+    #[account(owner = anchor_lang::system_program::ID)]
+    pub fee_account: AccountInfo<'info>,
+}
+
 
 #[derive(Accounts)]
 #[instruction(id: u16, status: u8, name: String, description: String, data: String)]
@@ -356,11 +402,11 @@ pub struct CreateStore<'info> {
     pub creator: Signer<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account()]
     pub authority: AccountInfo<'info>,
      
     /// CHECK: doesn't much need validation
-     #[account(owner=system_program.key())]
+     #[account()]
     pub secondary_authority: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
@@ -419,19 +465,18 @@ pub struct CreateStoreProduct<'info> {
     pub creator: Signer<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account()]
     pub authority: AccountInfo<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account()]
     pub secondary_authority: AccountInfo<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account(owner=anchor_lang::system_program::ID)]
     pub pay_to: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
-    //pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
 }
 
@@ -463,15 +508,15 @@ pub struct CreateProduct<'info> {
     pub creator: Signer<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account()]
     pub authority: AccountInfo<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account()]
     pub secondary_authority: AccountInfo<'info>,
 
     /// CHECK: doesn't much need validation
-    #[account(owner=system_program.key())]
+    #[account(owner=anchor_lang::system_program::ID)]
     pub pay_to: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
@@ -577,6 +622,20 @@ pub struct BuyProduct<'info> {
     /// CHECK: doesn't much need validation  
     #[account(owner=system_program.key())] 
     pub buy_for: AccountInfo<'info>,
+
+    #[account(seeds = [PROGRAM_METADATA_BYTES], bump=program_metadata.bump)]
+    pub program_metadata: Box<Account<'info, ProgramMetadata>>,
+
+    #[account(
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = fee_account,
+    )]
+    pub fee_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK:
+    #[account(address = program_metadata.fee_account)]
+    pub fee_account: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -756,6 +815,8 @@ pub enum ErrorCode {
     UnableToModifySnapshot,
     #[msg("purchasing snapshots is not allowed")]
     UnableToPurchaseSnapshot,
+    #[msg("invalid token account")]
+    InvalidTokenAccount,
 }
 
 impl ProgramMetadata {

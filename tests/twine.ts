@@ -34,12 +34,15 @@ const toBytes = (data, type) =>
   type == "u64" ? uIntToBytes(BigInt(data), 8, "setBigUint")
                 : `Not Sure about type - ${type}`
 
+
+const PURCHASE_TRANSACTION_FEE = 10000;
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
 const creatorKeypair = Keypair.generate();
-const secondaryAuthority = Keypair.generate().publicKey; //new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
-const creatorAccountLamportsRequired = 150_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
-const paymentTokensRequired = 5;
+const secondaryAuthorityPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
+const feeAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
+const payToAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
+const creatorAccountLamportsRequired = 80_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
 
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
@@ -59,8 +62,9 @@ describe("twine", () => {
   const loneProductId = generateRandomU32();
   const productName = "test-product";
   const productDescription = "test-product-description";
-  const productPrice = new BN(1);
+  const productPrice = new BN(1000000); //1 USDC
   const productInventory = new BN(5);
+  const paymentTokensRequired = productPrice.toNumber() + PURCHASE_TRANSACTION_FEE;
 
   let [programMetadataPda, programMetadataPdaBump] = PublicKey.findProgramAddressSync(
     [
@@ -103,7 +107,7 @@ describe("twine", () => {
         return;   
 
       const airdropConfirmation = await provider.connection
-        .confirmTransaction(airdropSignature,'confirmed')
+        .confirmTransaction(airdropSignature,'finalized')
         .catch(reject);
 
       if(!airdropConfirmation)
@@ -128,8 +132,8 @@ describe("twine", () => {
       programMetadata: programMetadataPda,
       creator: creatorKeypair.publicKey,
       authority: provider.publicKey,
-      secondaryAuthority: secondaryAuthority,
-      feeAccount: secondaryAuthority,
+      secondaryAuthority: secondaryAuthorityPubkey,
+      feeAccount: feeAccountPubkey,
     })
     .transaction();
 
@@ -142,8 +146,35 @@ describe("twine", () => {
     expect(programMetadata.creator).is.eql(creatorKeypair.publicKey);
     expect(programMetadata.authority).is.eql(provider.publicKey);
     expect(programMetadata.secondaryAuthority).is.eql(secondaryAuthority);
-    expect(programMetadata.feeAccount).is.eql(secondaryAuthority);
+    expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
   });
+
+  it("Change fee account", async () => {
+
+    const feeTokenAccount = await spl_token.getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      creatorKeypair,
+      paymentTokenMintAddress,
+      feeAccountPubkey,
+      false,
+      'confirmed',
+      {commitment:'confirmed'},
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID);
+
+    const tx = await program.methods
+    .changeFeeAccount()
+    .accounts({
+      programMetadata: programMetadataPda,
+      authority: provider.publicKey,
+      feeAccount: feeAccountPubkey,
+    })
+    .rpc();
+    
+    const programMetadata = await program.account.programMetadata.fetch(programMetadataPda);
+    expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
+  });
+
 
   it("Create Store", async () => {
     const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
@@ -155,7 +186,7 @@ describe("twine", () => {
       store: storePda,
       creator: creatorKeypair.publicKey,
       authority: creatorKeypair.publicKey,
-      secondaryAuthority: secondaryAuthority,    
+      secondaryAuthority: secondaryAuthorityPubkey,    
     })
     .transaction();
 
@@ -167,7 +198,7 @@ describe("twine", () => {
     expect(createdStore.id).is.equal(storeId);
     expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
     expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
-    expect(createdStore.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(createdStore.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(createdStore.tag.toNumber()).is.equal(0);
     expect(createdStore.name).is.equal(storeName.toLowerCase());
     expect(createdStore.description).is.eql(storeDescription.toLowerCase());
@@ -199,7 +230,7 @@ describe("twine", () => {
     expect(updatedStore.status).is.equal(updatedStoreStatus);
     expect(updatedStore.creator).is.eql(creatorKeypair.publicKey);
     expect(updatedStore.authority).is.eql(creatorKeypair.publicKey);
-    expect(updatedStore.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(updatedStore.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(updatedStore.id).is.equal(storeId);
     expect(updatedStore.tag.toNumber()).is.equal(0);
     expect(updatedStore.productCount.toNumber()).is.equal(0);  
@@ -225,8 +256,8 @@ describe("twine", () => {
         store: storePda,
         creator: creatorKeypair.publicKey,
         authority: creatorKeypair.publicKey,
-        secondaryAuthority: secondaryAuthority,  
-        payTo: secondaryAuthority,
+        secondaryAuthority: secondaryAuthorityPubkey,  
+        payTo: payToAccountPubkey,
         //tokenProgram: TOKEN_PROGRAM_ID,
       })
       .transaction();
@@ -251,11 +282,11 @@ describe("twine", () => {
     expect(createdProduct.status).is.equal(productStatus);
     expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
     expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
-    expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(createdProduct.id).is.equal(storeProductId); 
     expect(createdProduct.tag.toNumber()).is.equal(0); 
     //expect(createdProduct.mint).is.eql(storeProductMintPda);
-    expect(createdProduct.payTo).is.eql(secondaryAuthority);
+    expect(createdProduct.payTo).is.eql(payToAccountPubkey);
     expect(createdProduct.store).is.eql(storePda); 
     expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
     expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
@@ -304,11 +335,11 @@ describe("twine", () => {
     expect(updatedProduct.status).is.equal(updatedProductStatus);
     expect(updatedProduct.creator).is.eql(creatorKeypair.publicKey);
     expect(updatedProduct.authority).is.eql(creatorKeypair.publicKey);
-    expect(updatedProduct.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(updatedProduct.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(updatedProduct.id).is.equal(storeProductId);
     expect(updatedProduct.tag.toNumber()).is.equal(0); 
     //expect(updatedProduct.mint).is.eql(storeProductMintPda);
-    expect(updatedProduct.payTo).is.eql(secondaryAuthority);
+    expect(updatedProduct.payTo).is.eql(payToAccountPubkey);
     expect(updatedProduct.store).is.eql(storePda); 
     expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
     expect(updatedProduct.inventory.toNumber()).is.equal(updatedProductInventory);
@@ -324,7 +355,6 @@ describe("twine", () => {
     const redemptionType = 1;
     const loneProductStatus = 0;
 
-
     const tx = await program.methods
     .createProduct(loneProductId, loneProductStatus, //productMintDecimals,
      productPrice, productInventory, redemptionType, productName.toLowerCase(), productDescription.toLowerCase(), data)
@@ -333,9 +363,8 @@ describe("twine", () => {
       product: loneProductPda,
       creator: creatorKeypair.publicKey,
       authority: creatorKeypair.publicKey,
-      secondaryAuthority: secondaryAuthority,
-      payTo: secondaryAuthority,
-      //tokenProgram: TOKEN_PROGRAM_ID,
+      secondaryAuthority: secondaryAuthorityPubkey,
+      payTo: payToAccountPubkey,
     })
     .transaction();
    
@@ -346,12 +375,12 @@ describe("twine", () => {
     expect(createdProduct.status).is.equal(loneProductStatus);
     expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
     expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
-    expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(createdProduct.id).is.equal(loneProductId); 
     expect(createdProduct.tag.toNumber()).is.equal(0); 
     expect(createdProduct.isSnapshot).is.equal(false); 
     //expect(createdProduct.mint).is.eql(loneProductMintPda);
-    expect(createdProduct.payTo).is.eql(secondaryAuthority);
+    expect(createdProduct.payTo).is.eql(payToAccountPubkey);
     expect(createdProduct.store).is.eql(PublicKey.default); 
     expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
     expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
@@ -380,10 +409,11 @@ describe("twine", () => {
       paymentTokenMintAddress,
       creatorKeypair.publicKey,
       false,
-      'confirmed',
-      {commitment:'confirmed'},
+      'finalized',
+      {commitment:'finalized'},
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID);
+
 
       console.log('buyer token account: ', creatorPaymentTokenAta.address.toBase58());
       expect(creatorPaymentTokenAta.mint).is.eql(paymentTokenMintAddress);
@@ -400,8 +430,7 @@ describe("twine", () => {
         })
         .transaction();
 
-
-      const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, paymentTokenAirdropTx, [creatorKeypair]);
+      const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, paymentTokenAirdropTx, [creatorKeypair], {commitment: 'finalized'});
       const updatedCreatorPaymentTokenAta = await spl_token.getAccount(provider.connection, creatorPaymentTokenAta.address, 'confirmed', TOKEN_PROGRAM_ID);
       expect(updatedCreatorPaymentTokenAta.mint).is.eql(paymentTokenMintAddress);
       expect(updatedCreatorPaymentTokenAta.owner).is.eql(creatorKeypair.publicKey);
@@ -418,6 +447,16 @@ describe("twine", () => {
     const payToAtaAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, loneProduct.payTo, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
     const quantity = 1;
     const nonce = generateRandomU16();
+    const feeTokenAccount = await spl_token.getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      creatorKeypair,
+      paymentTokenMintAddress,
+      feeAccountPubkey,
+      false,
+      'confirmed',
+      {commitment:'confirmed'},
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID);
 
     console.log('payer ATA address: ', payerAtaAddress.toBase58());
     console.log('payTo ATA address: ', payToAtaAddress.toBase58());
@@ -468,7 +507,7 @@ describe("twine", () => {
       payerAtaAddress,
       purchaseTicketAtaAddress,
       creatorKeypair.publicKey,
-      loneProduct.price.toNumber(),
+      loneProduct.price.toNumber() + PURCHASE_TRANSACTION_FEE,
       [],
       TOKEN_PROGRAM_ID,
     );
@@ -487,12 +526,15 @@ describe("twine", () => {
         productSnapshotMetadata: productSnapshotMetadataPda,
         productSnapshot: productSnapshotPda,
         buyer: creatorKeypair.publicKey,
-        buyFor: secondaryAuthority,
+        buyFor: secondaryAuthorityPubkey,
         payTo: loneProduct.payTo,
         payToTokenAccount: payToAtaAddress,
         purchaseTicket: purchaseTicketPda,
         purchaseTicketPayment: purchaseTicketAtaAddress,
         purchaseTicketPaymentMint: paymentTokenMintAddress,
+        programMetadata: programMetadataPda,
+        feeTokenAccount: feeTokenAccount.address,
+        feeAccount: feeAccountPubkey,
       })
       .instruction();
 
@@ -562,11 +604,10 @@ describe("twine", () => {
     expect(purchaseTicket.productSnapshot).is.eql(productSnapshotPda);
     expect(purchaseTicket.buyer).is.eql(creatorKeypair.publicKey);
     expect(purchaseTicket.payTo).is.eql(loneProduct.payTo);
-    expect(purchaseTicket.authority).is.eql(secondaryAuthority);
+    expect(purchaseTicket.authority).is.eql(secondaryAuthorityPubkey);
     expect(purchaseTicket.redeemed.toNumber()).is.equal(0);
     expect(purchaseTicket.nonce).is.equal(nonce);
-  
-    
+      
     //const mintAccount = await spl_token.getMint(provider.connection, loneProduct.mint,'confirmed', TOKEN_PROGRAM_ID);  
     //expect(mintAccount.supply).is.equal(BigInt(quantity));
     
@@ -605,12 +646,12 @@ describe("twine", () => {
     expect(updatedProduct.status).is.equal(updatedStatus);
     expect(updatedProduct.creator).is.eql(creatorKeypair.publicKey);
     expect(updatedProduct.authority).is.eql(creatorKeypair.publicKey);
-    expect(updatedProduct.secondaryAuthority).is.eql(secondaryAuthority);
+    expect(updatedProduct.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
     expect(updatedProduct.id).is.equal(loneProductId);
     expect(updatedProduct.tag.toNumber()).is.equal(0); 
     //expect(updatedProduct.mint).is.eql(loneProductMintPda);
     expect(updatedProduct.usableSnapshot).is.eql(PublicKey.default);
-    expect(updatedProduct.payTo).is.eql(secondaryAuthority);
+    expect(updatedProduct.payTo).is.eql(payToAccountPubkey);
     expect(updatedProduct.store).is.eql(PublicKey.default); 
     expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
     expect(updatedProduct.inventory.toNumber()).is.equal(updatedInventory);
@@ -619,6 +660,7 @@ describe("twine", () => {
     expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
     expect(updatedProduct.data).is.equal(updatedData);
   });
+  
 /*
   describe("Mock Data", ()=>{      
     const storeMap = new Map<string,number>();
@@ -657,7 +699,7 @@ describe("twine", () => {
             store: mockStorePda,
             creator: creatorKeypair.publicKey,
             authority: creatorKeypair.publicKey,
-            secondaryAuthority: secondaryAuthority,
+            secondaryAuthority: secondaryAuthorityPubkey,
         })
         .transaction();
 
@@ -672,7 +714,7 @@ describe("twine", () => {
         expect(createdStore.id).is.equal(storeId);
         expect(createdStore.creator).is.eql(creatorKeypair.publicKey);
         expect(createdStore.authority).is.eql(creatorKeypair.publicKey);
-        expect(createdStore.secondaryAuthority).is.eql(secondaryAuthority);
+        expect(createdStore.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
         expect(createdStore.tag.toNumber()).is.equal(0);
         expect(createdStore.name).is.equal(storeName.toLowerCase());
         expect(createdStore.description).is.eql(storeDescription.toLowerCase());
@@ -705,7 +747,7 @@ describe("twine", () => {
         //const productMintDecimals = product.decimals ?? 0;
         const productName = product.displayName;
         const productDescription = product.displayDescription;
-        const productPrice = product.price ?? 0;
+        const productPrice = product.price ?? 0 * 1000000;
         const productInventory = product.inventory ?? 0;
         const productRedemptionType = product.redemptionType ?? 1;
         const productStatus = product?.status ?? 0;
@@ -739,8 +781,8 @@ describe("twine", () => {
                   store: mockStorePda,
                   creator: creatorKeypair.publicKey,
                   authority: creatorKeypair.publicKey,
-                  secondaryAuthority: secondaryAuthority,
-                  payTo: secondaryAuthority,
+                  secondaryAuthority: secondaryAuthorityPubkey,
+                  payTo: payToAccountPubkey,
                 })
                 .transaction();
         } 
@@ -760,8 +802,8 @@ describe("twine", () => {
                   product: mockProductPda,
                   creator: creatorKeypair.publicKey,
                   authority: creatorKeypair.publicKey,
-                  secondaryAuthority: secondaryAuthority,
-                  payTo: secondaryAuthority,
+                  secondaryAuthority: secondaryAuthorityPubkey,
+                  payTo: payToAccountPubkey,
                 })
                 .transaction();
         }
@@ -789,11 +831,11 @@ describe("twine", () => {
         expect(createdProduct.status).is.equal(productStatus);
         expect(createdProduct.creator).is.eql(creatorKeypair.publicKey);
         expect(createdProduct.authority).is.eql(creatorKeypair.publicKey);
-        expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthority);
+        expect(createdProduct.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
         expect(createdProduct.id).is.equal(mockProductId); 
         expect(createdProduct.tag.toNumber()).is.equal(0); 
         //expect(createdProduct.mint).is.eql(mockProductMintKeypair.publicKey);
-        expect(createdProduct.payTo).is.eql(secondaryAuthority);
+        expect(createdProduct.payTo).is.eql(payToAccountPubkey);
         expect(createdProduct.store).is.eql(mockStoreId ? mockStorePda : PublicKey.default); 
         expect(createdProduct.price.toNumber()).is.equal(productPrice);
         expect(createdProduct.inventory.toNumber()).is.equal(productInventory);
