@@ -34,7 +34,7 @@ const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
 pub mod twine {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, fee: u64) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, _fee: u64) -> Result<()> {
         let program_metadata = &mut ctx.accounts.program_metadata;
         if program_metadata.initialized {
             return Err(ErrorCode::AlreadyInitialized.into());
@@ -52,7 +52,7 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn change_fee(ctx: Context<UpdateProgramMetadata>, _fee: u64) -> Result<()> {
+    pub fn change_fee(_ctx: Context<UpdateProgramMetadata>, _fee: u64) -> Result<()> {
         //ctx.accounts.program_metadata.fee = fee;        
         Ok(())
     }
@@ -260,7 +260,6 @@ pub mod twine {
         let purchase_ticket_seed_bump = *ctx.bumps.get("purchase_ticket").unwrap();
         let product_snapshot_metadata_key = product_snapshot_metadata.key();
         let buyer_key = buyer.key();
-        
         let purchase_ticket_seeds = &[
             PURCHASE_TICKET_BYTES,
             product_snapshot_metadata_key.as_ref(),
@@ -268,23 +267,10 @@ pub mod twine {
             &_nonce.to_be_bytes(), 
             &[purchase_ticket_seed_bump]
         ];
-
         let payment_transfer_signer = &[&purchase_ticket_seeds[..]];
+       
 
-        let payment_transfer_accounts = anchor_spl::token::Transfer {
-            from: purchase_ticket_payment.to_account_info(),
-            to: pay_to_token_account .to_account_info(),
-            authority: purchase_ticket.to_account_info(), //ata owned by twine program
-        };
-
-        let payment_transfer_cpicontext = CpiContext::new_with_signer(
-            token_program.to_account_info(),
-            payment_transfer_accounts,
-            payment_transfer_signer,        
-        );
-
-        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, product.price)?;
-
+        //fee transfer        
         let fee_transfer_accounts = anchor_spl::token::Transfer {
             from: purchase_ticket_payment.to_account_info(),
             to: fee_token_account.to_account_info(),
@@ -298,6 +284,26 @@ pub mod twine {
         );
 
         let _fee_transfer_result = token::transfer(fee_transfer_cpicontext, PURCHASE_TRANSACTION_FEE)?;
+
+
+        if product.redemption_type == RedemptionType::IMMEDIATE {  //release payment if redemption type is immediate
+
+            let payment_transfer_accounts = anchor_spl::token::Transfer {
+                from: purchase_ticket_payment.to_account_info(),
+                to: pay_to_token_account .to_account_info(),
+                authority: purchase_ticket.to_account_info(), //ata owned by twine program
+            };
+
+            let payment_transfer_cpicontext = CpiContext::new_with_signer(
+                token_program.to_account_info(),
+                payment_transfer_accounts,
+                payment_transfer_signer,        
+            );
+
+            let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, product.price)?;
+            
+            purchase_ticket.redeemed = quantity;
+        }
 
         product_snapshot_metadata.bump = *ctx.bumps.get("product_snapshot_metadata").unwrap();
         product_snapshot_metadata.version = PRODUCT_SNAPSHOT_METADATA_VERSION;
@@ -842,4 +848,11 @@ impl Product {
     fn is_authorized(&self, key: &Pubkey) -> bool {
         *key == self.authority || *key == self.secondary_authority
     }
+}
+
+struct RedemptionType;
+impl RedemptionType {
+    const IMMEDIATE: u8 = 1;
+    //const TICKET: u8 =  2;
+    //const CONFIRMATION: u8 = 4;
 }
