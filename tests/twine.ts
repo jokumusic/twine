@@ -188,7 +188,7 @@ describe("twine", () => {
       authority: provider.publicKey,
       feeAccount: feeAccountPubkey,
     })
-    .rpc({commitment: 'finalized'});
+    .rpc();
     
     const programMetadata = await program.account.programMetadata.fetch(programMetadataPda);
     expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
@@ -744,6 +744,39 @@ describe("twine", () => {
     expect(ticketTaker.enabledTimestamp.toNumber()).is.greaterThan(0);
     expect(ticketTaker.disabledSlot.toNumber()).is.equal(0);
     expect(ticketTaker.disabledTimestamp.toNumber()).is.equal(0);
+  });
+
+
+  it("Create Lone Product Ticket Taker", async () => {
+    const [loneProductTicketTakerPda, loneProductTicketTakerPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("product_taker"),
+        loneProductPda.toBuffer(),
+        ticketTakerKeypair.publicKey.toBuffer(),        
+      ], program.programId);
+
+    const txSuccess = await program.methods
+      .createProductTicketTaker()
+      .accounts({
+        ticketTaker: loneProductTicketTakerPda,
+        taker: ticketTakerKeypair.publicKey,
+        product: loneProductPda,
+        productAuthority: creatorKeypair.publicKey
+      })
+      .transaction();
+
+    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [creatorKeypair]);
+
+    const loneProductTicketTaker = await program.account.ticketTaker.fetch(loneProductTicketTakerPda);
+    expect(loneProductTicketTaker.bump).is.equal(loneProductTicketTakerPdaBump);
+    expect(loneProductTicketTaker.version).is.equal(0);
+    expect(loneProductTicketTaker.taker).is.eql(ticketTakerKeypair.publicKey);
+    expect(loneProductTicketTaker.entityType).is.equal(2);
+    expect(loneProductTicketTaker.authorizedBy).is.eql(creatorKeypair.publicKey);
+    expect(loneProductTicketTaker.enabledSlot.toNumber()).is.greaterThan(0);
+    expect(loneProductTicketTaker.enabledTimestamp.toNumber()).is.greaterThan(0);
+    expect(loneProductTicketTaker.disabledSlot.toNumber()).is.equal(0);
+    expect(loneProductTicketTaker.disabledTimestamp.toNumber()).is.equal(0);
   });
 
 
