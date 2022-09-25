@@ -41,6 +41,7 @@ const PURCHASE_TRANSACTION_FEE = 10000;
 ///Most of the time the user program has to send transactions to a separate wallet program...
 const creatorKeypair = Keypair.generate();
 const storeSecondaryAuthorityKeypair = Keypair.generate();
+const ticketTakerKeypair = Keypair.generate();
 const secondaryAuthorityPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
 const feeAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
 const payToAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
@@ -154,7 +155,7 @@ describe("twine", () => {
     })
     .transaction();
 
-    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair]);
+    const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'finalized'});
     
     programMetadata = await program.account.programMetadata.fetch(programMetadataPda);
     expect(programMetadata.bump).is.equal(programMetadataPdaBump);
@@ -166,6 +167,7 @@ describe("twine", () => {
     expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
   });
 
+
   it("Change fee account", async () => {
 
     const feeTokenAccount = await spl_token.getOrCreateAssociatedTokenAccount(
@@ -174,8 +176,8 @@ describe("twine", () => {
       paymentTokenMintAddress,
       feeAccountPubkey,
       false,
-      'confirmed',
-      {commitment:'confirmed'},
+      'finalized',
+      {commitment:'finalized'},
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID);
 
@@ -186,7 +188,7 @@ describe("twine", () => {
       authority: provider.publicKey,
       feeAccount: feeAccountPubkey,
     })
-    .rpc();
+    .rpc({commitment: 'finalized'});
     
     const programMetadata = await program.account.programMetadata.fetch(programMetadataPda);
     expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
@@ -710,7 +712,41 @@ describe("twine", () => {
     expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
     expect(updatedProduct.data).is.equal(updatedData);
   });
-  
+
+
+  it("Create Store Ticket Taker", async () => {
+    const [storeTicketTakerPda, storeTicketTakerPdaBump] = PublicKey.findProgramAddressSync(
+      [
+        anchor.utils.bytes.utf8.encode("store_taker"),
+        storePda.toBuffer(),
+        ticketTakerKeypair.publicKey.toBuffer(),        
+      ], program.programId);
+
+    const txSuccess = await program.methods
+      .createStoreTicketTaker()
+      .accounts({
+        ticketTaker: storeTicketTakerPda,
+        taker: ticketTakerKeypair.publicKey,
+        store: storePda,
+        storeAuthority: creatorKeypair.publicKey
+      })
+      .transaction();
+
+    const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [creatorKeypair]);
+
+    const ticketTaker = await program.account.ticketTaker.fetch(storeTicketTakerPda);
+    expect(ticketTaker.bump).is.equal(storeTicketTakerPdaBump);
+    expect(ticketTaker.version).is.equal(0);
+    expect(ticketTaker.taker).is.eql(ticketTakerKeypair.publicKey);
+    expect(ticketTaker.entityType).is.equal(1);
+    expect(ticketTaker.authorizedBy).is.eql(creatorKeypair.publicKey);
+    expect(ticketTaker.enabledSlot.toNumber()).is.greaterThan(0);
+    expect(ticketTaker.enabledTimestamp.toNumber()).is.greaterThan(0);
+    expect(ticketTaker.disabledSlot.toNumber()).is.equal(0);
+    expect(ticketTaker.disabledTimestamp.toNumber()).is.equal(0);
+  });
+
+
 /*
   describe("Mock Data", ()=>{      
     const storeMap = new Map<string,number>();

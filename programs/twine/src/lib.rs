@@ -18,6 +18,7 @@ const STORE_VERSION : u8 = 0;
 const PRODUCT_VERSION: u8 = 0;
 const PRODUCT_SNAPSHOT_METADATA_VERSION: u8 = 0;
 const PURCHASE_TICKET_VERSION: u8 = 0;
+const TICKET_TAKER_VERSION: u8 = 0;
 
 const PROGRAM_METADATA_BYTES: &[u8] = b"program_metadata";
 const STORE_SEED_BYTES : &[u8] = b"store";
@@ -211,7 +212,7 @@ pub mod twine {
         Ok(())
     }    
 
-    //keep this simple for now, but look at including snapshots on purchases
+
     pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
 
         let product = &mut ctx.accounts.product;
@@ -326,7 +327,9 @@ pub mod twine {
         purchase_ticket.authority = ctx.accounts.buy_for.key(); 
         purchase_ticket.nonce = _nonce;
         purchase_ticket.quantity = quantity;
-        purchase_ticket.redeemed = 0;        
+        purchase_ticket.redeemed = 0;
+        purchase_ticket.price = product.price;
+        purchase_ticket.store = product.store;
 
         let product_clone = product.clone().into_inner();
         ctx.accounts.product_snapshot.set_inner(product_clone);
@@ -337,7 +340,46 @@ pub mod twine {
         Ok(())
     }
 
+    pub fn create_store_ticket_taker(ctx: Context<CreateStoreTicketTaker>) -> Result<()> {
+        let clock = Clock::get()?;
+        let ticket_taker = &mut ctx.accounts.ticket_taker;
+    
+        ticket_taker.bump = *ctx.bumps.get("ticket_taker").unwrap();
+        ticket_taker.version = TICKET_TAKER_VERSION;
+        ticket_taker.taker = ctx.accounts.taker.key();
+        ticket_taker.entity_type = EntityType::STORE;
+        ticket_taker.entity = ctx.accounts.store.key();
+        ticket_taker.authorized_by = ctx.accounts.store_authority.key();
+        ticket_taker.enabled_slot = clock.slot;
+        ticket_taker.enabled_timestamp = clock.unix_timestamp;
+        ticket_taker.disabled_slot = 0;
+        ticket_taker.disabled_timestamp = 0;
+    
+        Ok(())
+    }
+    
+    pub fn create_product_ticket_taker(ctx: Context<CreateProductTicketTaker>) -> Result<()> {
+        let clock = Clock::get()?;
+        let ticket_taker = &mut ctx.accounts.ticket_taker;
+    
+        ticket_taker.bump = *ctx.bumps.get("ticket_taker").unwrap();
+        ticket_taker.version = TICKET_TAKER_VERSION;
+        ticket_taker.taker = ctx.accounts.taker.key();
+        ticket_taker.entity_type = EntityType::PRODUCT;
+        ticket_taker.entity = ctx.accounts.product.key();
+        ticket_taker.authorized_by = ctx.accounts.product_authority.key();
+        ticket_taker.enabled_slot = clock.slot;
+        ticket_taker.enabled_timestamp = clock.unix_timestamp;
+        ticket_taker.disabled_slot = 0;
+        ticket_taker.disabled_timestamp = 0;
+    
+        Ok(())
+    }
+
 }
+
+
+
 
 
 
@@ -654,6 +696,137 @@ pub struct BuyProduct<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
+#[derive(Accounts)]
+pub struct CreateStoreTicketTaker<'info> {
+
+    #[account(
+        init,
+        payer=store_authority,
+        space = 8 + TICKET_TAKER_SIZE,
+        seeds = [b"store_taker", store.key().as_ref(), taker.key().as_ref()],
+        bump
+    )]
+    pub ticket_taker: Account<'info, TicketTaker>,
+
+    ///CHECK: any account with a signer can be authorized by the store_authority
+    pub taker: AccountInfo<'info>,
+
+    #[account(
+        constraint = store.is_authorized(&store_authority.key),
+        seeds=[STORE_SEED_BYTES, store.creator.key().as_ref(), &store.id.to_be_bytes()],
+        bump=store.bump
+    )]
+    pub store: Account<'info, Store>,
+
+    #[account(mut)]
+    pub store_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CreateProductTicketTaker<'info> {
+
+    #[account(
+        init,
+        payer=product_authority,
+        space = 8 + TICKET_TAKER_SIZE,
+        seeds = [b"product_taker", product.key().as_ref(), taker.key().as_ref()],
+        bump
+    )]
+    pub ticket_taker: Account<'info, TicketTaker>,
+
+    ///CHECK: any account with a signer can be authorized by the store_authority
+    pub taker: AccountInfo<'info>,
+
+    #[account(
+        constraint = product.is_authorized(&product_authority.key),
+        seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()], 
+        bump=product.bump
+    )]
+    pub product: Account<'info, Product>,
+
+    #[account(mut)]
+    pub product_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RedeemTicket<'info> {
+
+    #[account(
+        seeds = 
+        [
+            PURCHASE_TICKET_BYTES,
+            purchase_ticket.product_snapshot_metadata.key().as_ref(),
+            purchase_ticket.buyer.key().as_ref(),
+            &purchase_ticket.nonce.to_be_bytes()
+        ], 
+        bump = purchase_ticket.bump,
+        constraint = purchase_ticket.authority == purchase_ticket_authority.key()
+    )]
+    pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
+
+    #[account()]
+    pub purchase_ticket_authority: Signer<'info>,
+
+    #[account(
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = purchase_ticket,
+    )]
+    pub purchase_ticket_payment: Account<'info, TokenAccount>,
+
+    #[account(address = crate::payment_token::ID)]
+    pub purchase_ticket_payment_mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = pay_to,
+    )]
+    pub pay_to_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: we good
+    #[account(address = purchase_ticket.pay_to.key())]
+    pub pay_to: AccountInfo<'info>,
+
+    #[account(seeds = [PROGRAM_METADATA_BYTES], bump=program_metadata.bump)]
+    pub program_metadata: Box<Account<'info, ProgramMetadata>>,
+
+    #[account(
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = fee_account,
+    )]
+    pub fee_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK:
+    #[account(address = program_metadata.fee_account)]
+    pub fee_account: AccountInfo<'info>,
+
+    #[account(
+        constraint = ticket_taker.entity == purchase_ticket.product || ticket_taker.entity == purchase_ticket.store @ ErrorCode::InvalidTicketTaker
+    )]
+    pub ticket_taker: Account<'info, TicketTaker>,
+
+    #[account(
+        mut,
+        constraint = ticket_taker_signer.key() == ticket_taker.taker @ ErrorCode::InvalidTicketTakerSigner
+    )]
+    pub ticket_taker_signer: Signer<'info>,
+
+    #[account(
+        init,
+        payer = ticket_taker_signer,
+        space = 8 + REDEMPTION_SIZE,
+        seeds = [b"redemption", purchase_ticket.key().as_ref(), &purchase_ticket.quantity.to_be_bytes()],
+        bump
+    )]
+    pub redemption: Account<'info, Redemption>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
 
 const PROGRAM_METADATA_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 +32;
 #[account]
@@ -744,7 +917,8 @@ pub struct ProductSnapshotMetadata {
     pub nonce: u16, //2;
 }
 
-const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 2;
+
+const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 2 + 8 + 32;
 #[account]
 pub struct PurchaseTicket {
     pub bump: u8, //1;
@@ -760,7 +934,51 @@ pub struct PurchaseTicket {
     pub quantity: u64, //8;
     pub redeemed: u64, //8;
     pub nonce: u16, //2;
+    pub price:u64, //8;
+    pub store: Pubkey, //32;
 }
+
+
+const TICKET_TAKER_SIZE: usize = 1 + 1 + 32 + 1 + 32 + 32 + 8 + 8 + 8 + 8;
+#[account]
+pub struct TicketTaker {
+    pub bump: u8, //1;
+    pub version: u8, //1,
+    pub taker: Pubkey, //32,
+    pub entity_type: u8, //1, store or product?
+    pub entity: Pubkey, //32, reference to store or product
+    pub authorized_by: Pubkey, //32, account that authorized this ticket taker
+    pub enabled_slot: u64, //8,
+    pub enabled_timestamp: i64, //8, unix timestamp
+    pub disabled_slot: u64, //8,
+    pub disabled_timestamp: i64, //8, unix timestamp
+}
+
+
+
+const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 32;
+#[account]
+pub struct Redemption {
+    pub bump: u8, //1;
+    pub version: u8, //1; used for versioning schema, etc... to identify how to serialize/deserialize changes that may occur in the future
+    pub open_slot: u64, //8;
+    pub close_slot: u64, //8;
+    pub open_timestamp: i64, //8; unixtimestamp
+    pub close_timestamp: i64, //8;
+    pub product: Pubkey, //32;
+    pub product_snapshot_metadata: Pubkey, //32;
+    pub product_snapshot: Pubkey, //32;
+    pub puchase_ticket: Pubkey, //32;
+    pub buyer: Pubkey, //32;
+    pub pay_to: Pubkey, //32;
+    pub authority: Pubkey, //32;
+    pub quantity: u64, //8;
+    pub redeemed: u64, //8;
+    pub price:u64, //8;
+    pub redeemed_by: Pubkey, //32;
+}
+
+
 
 
 /// Used as a bitwise mask for the product category
@@ -830,6 +1048,10 @@ pub enum ErrorCode {
     UnableToPurchaseSnapshot,
     #[msg("invalid token account")]
     InvalidTokenAccount,
+    #[msg("signer isn't the ticket taker")]
+    InvalidTicketTakerSigner,
+    #[msg("ticket taker isn't authorized to take the ticket")]
+    InvalidTicketTaker,
 }
 
 impl ProgramMetadata {
@@ -855,4 +1077,10 @@ impl RedemptionType {
     const IMMEDIATE: u8 = 1;
     //const TICKET: u8 =  2;
     //const CONFIRMATION: u8 = 4;
+}
+
+struct EntityType;
+impl EntityType {
+    const STORE: u8 = 1;
+    const PRODUCT: u8 = 2;
 }
