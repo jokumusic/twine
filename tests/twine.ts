@@ -189,7 +189,7 @@ describe("[Twine]", () => {
 
   }); //program tests
 
-/*
+
   describe("store tests", () => {
     it("Create Store", async () => {
       const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
@@ -429,7 +429,7 @@ describe("[Twine]", () => {
     });
 
   });//store tests
-*/
+
   describe("[Lone Product Tests]", () => {
     const loneProductId = generateRandomU32();
     const updatedProductPrice = 200000;
