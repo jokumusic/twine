@@ -19,6 +19,7 @@ const PRODUCT_VERSION: u8 = 0;
 const PRODUCT_SNAPSHOT_METADATA_VERSION: u8 = 0;
 const PURCHASE_TICKET_VERSION: u8 = 0;
 const TICKET_TAKER_VERSION: u8 = 0;
+const REDEMPTION_VERSION: u8 = 0;
 
 const PROGRAM_METADATA_BYTES: &[u8] = b"program_metadata";
 const STORE_SEED_BYTES : &[u8] = b"store";
@@ -214,29 +215,27 @@ pub mod twine {
 
 
     pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
-
         let product = &mut ctx.accounts.product;
-        let buyer = &mut ctx.accounts.buyer;        
+        let buyer = &mut ctx.accounts.buyer;
         let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
         let product_snapshot = &mut ctx.accounts.product_snapshot;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
         let purchase_ticket_payment = &mut ctx.accounts.purchase_ticket_payment;
         let pay_to = &ctx.accounts.pay_to;
         let pay_to_token_account = &ctx.accounts.pay_to_token_account;
-        let token_program = &ctx.accounts.token_program;       
+        let token_program = &ctx.accounts.token_program;
         let fee_token_account = &mut ctx.accounts.fee_token_account;
-        let clock = Clock::get()?;        
- 
-        let total_purchase_price = product.price * quantity;  
+        let clock = Clock::get()?;
+        let total_purchase_price = product.price * quantity;
         
-        msg!("purchase ticket payment has {} USDC and total price is {} (quantity={}, price={})",
+        msg!("purchase ticket payment has {} USDC and total price is {} (quantity={}, price={}, fee={})",
              purchase_ticket_payment.amount,
-             total_purchase_price,
+             total_purchase_price + PURCHASE_TRANSACTION_FEE,
              quantity,
-             product.price);        
-     
-     
-        if product.status != 0 {
+             product.price,
+             PURCHASE_TRANSACTION_FEE);
+ 
+        if product.status != ProductStatus::ACTIVE {
             return Err(ErrorCode::ProductIsNotActive.into());
         }
 
@@ -250,14 +249,14 @@ pub mod twine {
 
         if product.is_snapshot {
             return Err(ErrorCode::UnableToPurchaseSnapshot.into());
-        }        
+        }
         
         if purchase_ticket_payment.amount < (total_purchase_price + PURCHASE_TRANSACTION_FEE) {
             return Err(ErrorCode::InsufficientFunds.into());
-        }        
+        }
             
         require_keys_eq!(pay_to.key(), product.pay_to.key());
-   
+
         let purchase_ticket_seed_bump = *ctx.bumps.get("purchase_ticket").unwrap();
         let product_snapshot_metadata_key = product_snapshot_metadata.key();
         let buyer_key = buyer.key();
@@ -265,11 +264,10 @@ pub mod twine {
             PURCHASE_TICKET_BYTES,
             product_snapshot_metadata_key.as_ref(),
             buyer_key.as_ref(),
-            &_nonce.to_be_bytes(), 
+            &_nonce.to_be_bytes(),
             &[purchase_ticket_seed_bump]
         ];
-        let payment_transfer_signer = &[&purchase_ticket_seeds[..]];
-       
+        let payment_transfer_signer = &[&purchase_ticket_seeds[..]];       
 
         //fee transfer        
         let fee_transfer_accounts = anchor_spl::token::Transfer {
@@ -281,11 +279,10 @@ pub mod twine {
         let fee_transfer_cpicontext = CpiContext::new_with_signer(
     token_program.to_account_info(),
             fee_transfer_accounts,
-            payment_transfer_signer,        
+            payment_transfer_signer,
         );
 
         let _fee_transfer_result = token::transfer(fee_transfer_cpicontext, PURCHASE_TRANSACTION_FEE)?;
-
 
         if product.redemption_type == RedemptionType::IMMEDIATE {  //release payment if redemption type is immediate
 
@@ -298,36 +295,38 @@ pub mod twine {
             let payment_transfer_cpicontext = CpiContext::new_with_signer(
                 token_program.to_account_info(),
                 payment_transfer_accounts,
-                payment_transfer_signer,        
+                payment_transfer_signer,
             );
 
             let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, product.price)?;
             
             purchase_ticket.redeemed = quantity;
+            purchase_ticket.remaining_quantity = 0;
+        }
+        else {
+            purchase_ticket.remaining_quantity = quantity;
+            purchase_ticket.redeemed = 0;
         }
 
         product_snapshot_metadata.bump = *ctx.bumps.get("product_snapshot_metadata").unwrap();
         product_snapshot_metadata.version = PRODUCT_SNAPSHOT_METADATA_VERSION;
         product_snapshot_metadata.slot = clock.slot;
-        product_snapshot_metadata.timestamp = clock.unix_timestamp;   
+        product_snapshot_metadata.timestamp = clock.unix_timestamp;
         product_snapshot_metadata.product = product.key();
         product_snapshot_metadata.product_snapshot =  product_snapshot.key();
         product_snapshot_metadata.nonce = _nonce;
-
 
         purchase_ticket.bump = *ctx.bumps.get("purchase_ticket").unwrap();
         purchase_ticket.version = PURCHASE_TICKET_VERSION;
         purchase_ticket.slot = clock.slot;
         purchase_ticket.timestamp = clock.unix_timestamp;
-        purchase_ticket.product = product.key(); 
+        purchase_ticket.product = product.key();
         purchase_ticket.product_snapshot_metadata = product_snapshot_metadata.key();
-        purchase_ticket.product_snapshot = product_snapshot.key();        
+        purchase_ticket.product_snapshot = product_snapshot.key(); 
         purchase_ticket.buyer = buyer.key();
         purchase_ticket.pay_to = pay_to.key();
-        purchase_ticket.authority = ctx.accounts.buy_for.key(); 
+        purchase_ticket.authority = ctx.accounts.buy_for.key();
         purchase_ticket.nonce = _nonce;
-        purchase_ticket.quantity = quantity;
-        purchase_ticket.redeemed = 0;
         purchase_ticket.price = product.price;
         purchase_ticket.store = product.store;
 
@@ -376,9 +375,97 @@ pub mod twine {
         Ok(())
     }
 
+    pub fn redeem_ticket(ctx: Context<RedeemTicket>, quantity: u64) -> Result<()> {
+        let clock = Clock::get()?;
+        let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
+        let fee_token_account = &ctx.accounts.fee_token_account;
+        let pay_to_token_account = &ctx.accounts.pay_to_token_account;
+        let token_program = &ctx.accounts.token_program;
+        let ticket_taker = &ctx.accounts.ticket_taker;
+        let purchase_ticket = &mut ctx.accounts.purchase_ticket;
+        let total_purchase_price = purchase_ticket.price * quantity;
+
+        if quantity <= 0 {
+            return Err(ErrorCode::QuantityMustBeGreaterThanZero.into());
+        }
+
+        if quantity > purchase_ticket.remaining_quantity {
+            return Err(ErrorCode::InsufficientRemainingRedemptions.into());
+        }
+
+        if purchase_ticket_payment.amount < (total_purchase_price + PURCHASE_TRANSACTION_FEE) {
+            return Err(ErrorCode::InsufficientFunds.into());
+        }
+        
+
+        let redemption = &mut ctx.accounts.redemption;
+        redemption.bump = *ctx.bumps.get("redemption").unwrap();
+        redemption.version = REDEMPTION_VERSION;
+        redemption.open_slot = clock.slot;
+        redemption.open_timestamp = clock.unix_timestamp;
+        redemption.product = purchase_ticket.product.key();
+        redemption.product_snapshot_metadata = purchase_ticket.product_snapshot_metadata.key();
+        redemption.product_snapshot = purchase_ticket.product_snapshot_metadata.key();
+        redemption.puchase_ticket = purchase_ticket.key();
+        redemption.buyer = purchase_ticket.buyer.key();
+        redemption.pay_to = purchase_ticket.pay_to.key();
+        redemption.authority = purchase_ticket.authority.key();
+        redemption.quantity = purchase_ticket.remaining_quantity;
+        redemption.redeemed = quantity;
+        redemption.price = purchase_ticket.price;
+        redemption.ticket_taker = ticket_taker.key();
+
+  
+        let purchase_ticket_seed_bump = *ctx.bumps.get("purchase_ticket").unwrap();
+        let product_snapshot_metadata_key = purchase_ticket.product_snapshot_metadata.key();
+        let buyer_key = purchase_ticket.buyer.key();
+        let purchase_ticket_seeds = &[
+            PURCHASE_TICKET_BYTES,
+            product_snapshot_metadata_key.as_ref(),
+            buyer_key.as_ref(),
+            &purchase_ticket.nonce.to_be_bytes(), 
+            &[purchase_ticket_seed_bump]
+        ];
+        let payment_transfer_signer = &[&purchase_ticket_seeds[..]];
+       
+        //fee transfer        
+        let fee_transfer_accounts = anchor_spl::token::Transfer {
+            from: purchase_ticket_payment.to_account_info(),
+            to: fee_token_account.to_account_info(),
+            authority: purchase_ticket.to_account_info(), //ata owned by twine program
+        };
+
+        let fee_transfer_cpicontext = CpiContext::new_with_signer(
+    token_program.to_account_info(),
+            fee_transfer_accounts,
+            payment_transfer_signer,
+        );
+
+        let _fee_transfer_result = token::transfer(fee_transfer_cpicontext, PURCHASE_TRANSACTION_FEE)?;
+  
+        //payment transfer
+        let payment_transfer_accounts = anchor_spl::token::Transfer {
+            from: purchase_ticket_payment.to_account_info(),
+            to: pay_to_token_account .to_account_info(),
+            authority: purchase_ticket.to_account_info(), //ata owned by twine program
+        };
+
+        let payment_transfer_cpicontext = CpiContext::new_with_signer(
+            token_program.to_account_info(),
+            payment_transfer_accounts,
+            payment_transfer_signer,
+        );
+
+        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, purchase_ticket.price * quantity)?;
+
+        purchase_ticket.redeemed += quantity;
+        purchase_ticket.remaining_quantity -= quantity;
+
+    
+        Ok(())
+    }
+
 }
-
-
 
 
 
@@ -774,7 +861,7 @@ pub struct RedeemTicket<'info> {
         token::mint = purchase_ticket_payment_mint,
         token::authority = purchase_ticket,
     )]
-    pub purchase_ticket_payment: Account<'info, TokenAccount>,
+    pub purchase_ticket_payment: Box<Account<'info, TokenAccount>>,
 
     #[account(address = crate::payment_token::ID)]
     pub purchase_ticket_payment_mint: Account<'info, Mint>,
@@ -784,7 +871,7 @@ pub struct RedeemTicket<'info> {
         token::mint = purchase_ticket_payment_mint,
         token::authority = pay_to,
     )]
-    pub pay_to_token_account: Account<'info, TokenAccount>,
+    pub pay_to_token_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: we good
     #[account(address = purchase_ticket.pay_to.key())]
@@ -807,7 +894,7 @@ pub struct RedeemTicket<'info> {
     #[account(
         constraint = ticket_taker.entity == purchase_ticket.product || ticket_taker.entity == purchase_ticket.store @ ErrorCode::InvalidTicketTaker
     )]
-    pub ticket_taker: Account<'info, TicketTaker>,
+    pub ticket_taker: Box<Account<'info, TicketTaker>>,
 
     #[account(
         mut,
@@ -819,10 +906,10 @@ pub struct RedeemTicket<'info> {
         init,
         payer = ticket_taker_signer,
         space = 8 + REDEMPTION_SIZE,
-        seeds = [b"redemption", purchase_ticket.key().as_ref(), &purchase_ticket.quantity.to_be_bytes()],
+        seeds = [b"redemption", purchase_ticket.key().as_ref(), &purchase_ticket.remaining_quantity.to_be_bytes()],
         bump
     )]
-    pub redemption: Account<'info, Redemption>,
+    pub redemption: Box<Account<'info, Redemption>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -931,7 +1018,7 @@ pub struct PurchaseTicket {
     pub buyer: Pubkey, //32;
     pub pay_to: Pubkey, //32;
     pub authority: Pubkey, //32;
-    pub quantity: u64, //8;
+    pub remaining_quantity: u64, //8;
     pub redeemed: u64, //8;
     pub nonce: u16, //2;
     pub price:u64, //8;
@@ -975,7 +1062,7 @@ pub struct Redemption {
     pub quantity: u64, //8;
     pub redeemed: u64, //8;
     pub price:u64, //8;
-    pub redeemed_by: Pubkey, //32;
+    pub ticket_taker: Pubkey, //32;
 }
 
 
@@ -1052,6 +1139,14 @@ pub enum ErrorCode {
     InvalidTicketTakerSigner,
     #[msg("ticket taker isn't authorized to take the ticket")]
     InvalidTicketTaker,
+    #[msg("not enough redemptions remain")]
+    InsufficientRemainingRedemptions,
+    #[msg("quantity must be greater than zero")]
+    QuantityMustBeGreaterThanZero,
+    #[msg("incorrect seed")]
+    IncorrectSeed,
+
+
 }
 
 impl ProgramMetadata {
@@ -1070,6 +1165,13 @@ impl Product {
     fn is_authorized(&self, key: &Pubkey) -> bool {
         *key == self.authority || *key == self.secondary_authority
     }
+}
+
+
+struct ProductStatus;
+impl ProductStatus {
+    const ACTIVE: u8 = 0;
+    //const INACTIVE: u8 = 1;
 }
 
 struct RedemptionType;
