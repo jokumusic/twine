@@ -183,6 +183,7 @@ describe("[Twine]", () => {
       expect(programMetadata.authority).is.eql(provider.publicKey);
       expect(programMetadata.secondaryAuthority).is.eql(secondaryAuthorityPubkey);
       expect(programMetadata.feeAccount).is.eql(feeAccountPubkey);
+      expect(programMetadata.fee.toNumber()).is.equal(PURCHASE_TRANSACTION_FEE);
     });
 
 
