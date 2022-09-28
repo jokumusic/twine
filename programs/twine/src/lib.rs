@@ -10,7 +10,7 @@ pub mod payment_token {
 }
 
 
-declare_id!("DHvX2ufjEgriS4u9QkTTZ4XLkz9i3EkBVmGK2fZpHnF");
+declare_id!("8u7SgCGmzZ7xjei8AzJ2PReBvkuxjSu8FBBrDnjM5GMZ");
 
 
 const PROGRAM_VERSION: u8 = 0;
@@ -28,7 +28,7 @@ const PRODUCT_SNAPSHOT_METADATA_BYTES: &[u8] = b"product_snapshot_metadata";
 const PRODUCT_SNAPSHOT_BYTES: &[u8] = b"product_snapshot";
 const PURCHASE_TICKET_BYTES : &[u8] = b"purchase_ticket";
 
-const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
+//const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
 //const GENERAL_TRANSACTION_FEE: u64 = 5000000; //.005; SOL coin has 9 decimals
 
 
@@ -36,7 +36,7 @@ const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
 pub mod twine {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, _fee: u64) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, fee: u64) -> Result<()> {
         let program_metadata = &mut ctx.accounts.program_metadata;
         if program_metadata.initialized {
             return Err(ErrorCode::AlreadyInitialized.into());
@@ -49,13 +49,13 @@ pub mod twine {
         program_metadata.authority = ctx.accounts.authority.key();
         program_metadata.secondary_authority = ctx.accounts.secondary_authority.key();
         program_metadata.fee_account = ctx.accounts.fee_account.key();
-        //program_metadata.fee = fee;
+        program_metadata.fee = fee;
 
         Ok(())
     }
 
-    pub fn change_fee(_ctx: Context<UpdateProgramMetadata>, _fee: u64) -> Result<()> {
-        //ctx.accounts.program_metadata.fee = fee;        
+    pub fn change_fee(ctx: Context<UpdateProgramMetadata>, fee: u64) -> Result<()> {
+        ctx.accounts.program_metadata.fee = fee;        
         Ok(())
     }
 
@@ -225,15 +225,16 @@ pub mod twine {
         let pay_to_token_account = &ctx.accounts.pay_to_token_account;
         let token_program = &ctx.accounts.token_program;
         let fee_token_account = &mut ctx.accounts.fee_token_account;
+        let fee = ctx.accounts.program_metadata.fee;
         let clock = Clock::get()?;
         let total_purchase_price = product.price * quantity;
         
         msg!("purchase ticket payment has {} USDC and total price is {} (quantity={}, price={}, fee={})",
              purchase_ticket_payment.amount,
-             total_purchase_price + PURCHASE_TRANSACTION_FEE,
+             total_purchase_price + fee,
              quantity,
              product.price,
-             PURCHASE_TRANSACTION_FEE);
+             fee);
  
         if product.status != ProductStatus::ACTIVE {
             return Err(ErrorCode::ProductIsNotActive.into());
@@ -251,7 +252,7 @@ pub mod twine {
             return Err(ErrorCode::UnableToPurchaseSnapshot.into());
         }
         
-        if purchase_ticket_payment.amount < (total_purchase_price + PURCHASE_TRANSACTION_FEE) {
+        if purchase_ticket_payment.amount < (total_purchase_price + fee) {
             return Err(ErrorCode::InsufficientFunds.into());
         }
             
@@ -282,7 +283,7 @@ pub mod twine {
             payment_transfer_signer,
         );
 
-        let _fee_transfer_result = token::transfer(fee_transfer_cpicontext, PURCHASE_TRANSACTION_FEE)?;
+        let _fee_transfer_result = token::transfer(fee_transfer_cpicontext, fee)?;
 
         if product.redemption_type == RedemptionType::IMMEDIATE {  //release payment if redemption type is immediate
 
@@ -482,15 +483,12 @@ pub struct Initialize<'info> {
 pub struct UpdateProgramMetadata<'info> {
     #[account(
         mut,
-        //has_one=authority,
         constraint= program_metadata.is_authorized(&authority.key),
         seeds = [PROGRAM_METADATA_BYTES],
         bump= program_metadata.bump)]
     pub program_metadata: Account<'info, ProgramMetadata>,
     
-    #[account(mut,
-        constraint = program_metadata.is_authorized(&authority.key)
-    )]
+    #[account(mut)]
     pub authority: Signer<'info>,
 }
 
@@ -907,7 +905,7 @@ pub struct RedeemTicket<'info> {
 }
 
 
-const PROGRAM_METADATA_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 +32;
+const PROGRAM_METADATA_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 +32 + 8;
 #[account]
 pub struct ProgramMetadata {
     pub bump: u8, //1;
@@ -917,7 +915,7 @@ pub struct ProgramMetadata {
     pub authority: Pubkey, //32;
     pub secondary_authority: Pubkey, //32;
     pub fee_account: Pubkey, //32;
-    //pub fee: u64, //8;
+    pub fee: u64, //8;
 }
 
 
