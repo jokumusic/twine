@@ -36,6 +36,7 @@ const toBytes = (data, type) =>
                 : `Not Sure about type - ${type}`
 
 
+const LOAD_MOCK_DATA = false;
 const PURCHASE_TRANSACTION_FEE = 10000;
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
@@ -46,7 +47,12 @@ const buyForKeypair = Keypair.generate();
 const secondaryAuthorityPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
 const feeAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
 const payToAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
-const creatorAccountLamportsRequired = 80_000_000; // because it's funded by airdrop, must be less than or equal to 1_000_000_000
+
+// because it's funded by airdrop, must be less than or equal to 1_000_000_000
+const creatorAccountLamportsRequired = LOAD_MOCK_DATA 
+  ? 20000000 * (data.stores.length + data.products.length) + 80000000
+  : 80000000; 
+
 
 const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
@@ -66,6 +72,7 @@ describe("[Twine]", () => {
   const productPrice = new BN(1000000); //1 USDC
   const productInventory = new BN(5);
   const paymentTokensRequired = productPrice.toNumber() + PURCHASE_TRANSACTION_FEE;
+
 
   let [programMetadataPda, programMetadataPdaBump] = PublicKey.findProgramAddressSync(
     [
@@ -206,7 +213,7 @@ describe("[Twine]", () => {
   }); //program tests
 
 
-  describe("store tests", () => {
+  describe("[Store Tests]", () => {
     it("Create Store", async () => {
       const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
       const storeStatus = 1;
@@ -664,8 +671,7 @@ describe("[Twine]", () => {
       tx.feePayer = creatorKeypair.publicKey;  
 
       const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'finalized'});
-
-      console.info('transaction signature: ', response);
+      //console.info('transaction signature: ', response);
       
       const productSnapshot = await program.account.product.fetch(productSnapshotPda);
       expect(productSnapshot.bump).is.equal(loneProduct.bump);
@@ -960,9 +966,8 @@ describe("[Twine]", () => {
         tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
         tx.feePayer = creatorKeypair.publicKey;  
   
-        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'finalized'});
-  
-        console.info('transaction signature: ', response);
+        const response = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'finalized'});  
+        //console.info('transaction signature: ', response);
         
         const productSnapshot = await program.account.product.fetch(productSnapshotPda);
         expect(productSnapshot.bump).is.equal(loneProduct.bump);
@@ -1073,15 +1078,14 @@ describe("[Twine]", () => {
           .transaction();
       
         tx.feePayer = ticketTakerKeypair.publicKey;
-        /*
-        tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-        tx.partialSign(buyForKeypair);
-        tx.sign(ticketTakerKeypair);
+        
+        //tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
+        //tx.partialSign(buyForKeypair);
+        //tx.sign(ticketTakerKeypair);
  
-        const txSignature = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
-          tx.serialize({ requireAllSignatures: false, verifySignatures: true }), 
-          {skipPreflight: true, commitment:'confirmed'});
-        */
+        //const txSignature = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
+        //  tx.serialize({ requireAllSignatures: false, verifySignatures: true }), 
+        //  {skipPreflight: true, commitment:'confirmed'});        
 
         const txSignature = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ticketTakerKeypair, buyForKeypair], {commitment: 'finalized'});
         console.info('ticket redemption signature: ', txSignature);
@@ -1126,7 +1130,8 @@ describe("[Twine]", () => {
   }); //lone product tests
 
 
-/*
+if(LOAD_MOCK_DATA)
+{
   describe("Mock Data", ()=>{      
     const storeMap = new Map<string,number>();
 
@@ -1169,7 +1174,7 @@ describe("[Twine]", () => {
         .transaction();
 
         const response = await anchor.web3
-          .sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'confirmed'})
+          .sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'finalized'})
           .catch(err=>console.log(err));     
         loadedStores++;
 
@@ -1279,14 +1284,7 @@ describe("[Twine]", () => {
         tx.partialSign(creatorKeypair);
         
         const txid = await anchor.web3
-          .sendAndConfirmRawTransaction(provider.connection, 
-            tx.serialize({
-                requireAllSignatures: true,
-                verifySignatures: true,
-                
-            }), 
-            {skipPreflight: true, commitment: 'confirmed'}
-          )
+          .sendAndConfirmTransaction(provider.connection, tx, [creatorKeypair], {commitment: 'finalized'})            
           .catch(err=>console.log(err));
 
         loadedProducts++;
@@ -1314,6 +1312,7 @@ describe("[Twine]", () => {
     }); //load products
 
   }); //mock data 
-*/
+}
+
 
 });
