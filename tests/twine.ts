@@ -36,7 +36,9 @@ const toBytes = (data, type) =>
                 : `Not Sure about type - ${type}`
 
 
+const RUN_STANDARD_TESTS = true;
 const LOAD_MOCK_DATA = false;
+
 const PURCHASE_TRANSACTION_FEE = 10000;
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
 ///Most of the time the user program has to send transactions to a separate wallet program...
@@ -44,9 +46,9 @@ const creatorKeypair = Keypair.generate();
 const storeSecondaryAuthorityKeypair = Keypair.generate();
 const ticketTakerKeypair = Keypair.generate();
 const buyForKeypair = Keypair.generate();
-const secondaryAuthorityPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
-const feeAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
-const payToAccountPubkey = new PublicKey("6vtSko9H2YNzDAs927n4oLVfGrY8ygHEDMrg5ShGyZQA");
+const secondaryAuthorityPubkey = new PublicKey("BriPLDEoL3odKfPCv8UCWMjXgeBepv7ytRxH1nYmS4qA");
+const feeAccountPubkey = new PublicKey("BriPLDEoL3odKfPCv8UCWMjXgeBepv7ytRxH1nYmS4qA");
+const payToAccountPubkey = new PublicKey("BriPLDEoL3odKfPCv8UCWMjXgeBepv7ytRxH1nYmS4qA");
 
 // because it's funded by airdrop, must be less than or equal to 1_000_000_000
 const creatorAccountLamportsRequired = LOAD_MOCK_DATA 
@@ -212,7 +214,8 @@ describe("[Twine]", () => {
 
   }); //program tests
 
-
+if(RUN_STANDARD_TESTS)
+{
   describe("[Store Tests]", () => {
     it("Create Store", async () => {
       const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
@@ -1118,21 +1121,19 @@ describe("[Twine]", () => {
         expect(updatedPayToTokenAccount.address).is.eql(payToTokenAccountAddress);
         expect(updatedPayToTokenAccount.owner).is.eql(purchaseTicket.payTo);
         expect(updatedPayToTokenAccount.mint).is.eql(paymentTokenMintAddress);
-        console.log('payToTokenAccount.amount=', Number(payToTokenAccount.amount));
-        console.log('purchaseTotal=', purchaseTicket.price.toNumber() * quantity);
-
         expect(updatedPayToTokenAccount.amount).is.equal(payToTokenAccount.amount + BigInt(purchaseTicket.price.toNumber() * quantity));
-
       });
   
     }); //lone product - ticketed redemption tests  
 
   }); //lone product tests
 
+}//RUN_STANDARD_TESTS
+
 
 if(LOAD_MOCK_DATA)
 {
-  describe("Mock Data", ()=>{      
+  describe("[Load Mock Data]", ()=>{      
     const storeMap = new Map<string,number>();
 
     it("load stores", async ()=> {  
@@ -1217,7 +1218,7 @@ if(LOAD_MOCK_DATA)
         //const productMintDecimals = product.decimals ?? 0;
         const productName = product.displayName;
         const productDescription = product.displayDescription;
-        const productPrice = product.price ?? 0 * 1000000;
+        const productPrice = (product.price ?? 0) * 1000000;
         const productInventory = product.inventory ?? 0;
         const productRedemptionType = product.redemptionType ?? 1;
         const productStatus = product?.status ?? 0;
@@ -1312,7 +1313,8 @@ if(LOAD_MOCK_DATA)
     }); //load products
 
   }); //mock data 
-}
+
+}//LOAD_MOCK_DATA
 
 
 });

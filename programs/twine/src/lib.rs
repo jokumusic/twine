@@ -10,7 +10,7 @@ pub mod payment_token {
 }
 
 
-declare_id!("8u7SgCGmzZ7xjei8AzJ2PReBvkuxjSu8FBBrDnjM5GMZ");
+declare_id!("2oZLdzAvNDXNAGgMGhU5bxXr8K6pQ5vDbrgCZXY9bZgu");
 
 
 const PROGRAM_VERSION: u8 = 0;
