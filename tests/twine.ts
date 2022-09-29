@@ -139,7 +139,7 @@ describe("[Twine]", () => {
         anchor.web3.SystemProgram.transfer({
           fromPubkey: creatorKeypair.publicKey,
           toPubkey: buyForKeypair.publicKey,
-          lamports: 2000000
+          lamports: 6000000
         })
       );
     
@@ -152,8 +152,8 @@ describe("[Twine]", () => {
     });
   });
 
-  describe("[Program Tests]", () => {
-
+  
+  describe("[Program Tests]", () => {    
     it("Initialize Program", async () => {
       let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
       
@@ -186,9 +186,7 @@ describe("[Twine]", () => {
       expect(programMetadata.fee.toNumber()).is.equal(PURCHASE_TRANSACTION_FEE);
     });
 
-
     it("Change fee account", async () => {
-
       const feeTokenAccount = await spl_token.getOrCreateAssociatedTokenAccount(
         provider.connection,
         creatorKeypair,
@@ -215,8 +213,10 @@ describe("[Twine]", () => {
 
   }); //program tests
 
+
 if(RUN_STANDARD_TESTS)
 {
+  
   describe("[Store Tests]", () => {
     it("Create Store", async () => {
       const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
@@ -727,21 +727,7 @@ if(RUN_STANDARD_TESTS)
       expect(buyerPaymentTokenAccount.address).is.eql(buyerPaymentTokenAddress);
       expect(buyerPaymentTokenAccount.mint).is.eql(paymentTokenMintAddress);
       expect(buyerPaymentTokenAccount.amount).is.equal(BigInt(0));
-      
-
-      //const payToTokenAccount = await spl_token.getAccount(provider.connection, payToAtaAddress);
-      //expect(payToTokenAccount.address).is.eql(payToAtaAddress);
-      //expect(payToTokenAccount.mint).is.eql(paymentTokenMintAddress);
-      //expect(payToTokenAccount.amount).is.eql(BigInt(loneProduct.price));      
-        
-      //const mintAccount = await spl_token.getMint(provider.connection, loneProduct.mint,'confirmed', TOKEN_PROGRAM_ID);  
-      //expect(mintAccount.supply).is.equal(BigInt(quantity));
-      
-      //const buyForAccount = await spl_token.getAccount(provider.connection, secondaryAuthorityPubkey, 'confirmed', TOKEN_PROGRAM_ID);
-      //expect(buyForAccount.address).is.eql(buyForAta);
-      //expect(buyForAccount.amount).is.equal(BigInt(quantity));
-      //expect(buyForAccount.owner).is.eql(creatorKeypair.publicKey);
-      //expect(buyForAccount.mint).is.eql(loneProduct.mint);      
+ 
     });
 
     it("Update Lone Product", async () => {
@@ -810,32 +796,6 @@ if(RUN_STANDARD_TESTS)
           creatorKeypair.publicKey.toBuffer(),
           Buffer.from(uIntToBytes(purchaseNonce,2,"setUint"))
         ], program.programId);
-
-
-      it("Create Lone Product Ticket Taker", async () => {          
-        const txSuccess = await program.methods
-          .createProductTicketTaker()
-          .accounts({
-            ticketTaker: loneProductTicketTakerPda,
-            taker: ticketTakerKeypair.publicKey,
-            product: loneProductPda,
-            productAuthority: creatorKeypair.publicKey
-          })
-          .transaction();
-  
-        const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [creatorKeypair]);
-  
-        const loneProductTicketTaker = await program.account.ticketTaker.fetch(loneProductTicketTakerPda);
-        expect(loneProductTicketTaker.bump).is.equal(loneProductTicketTakerPdaBump);
-        expect(loneProductTicketTaker.version).is.equal(0);
-        expect(loneProductTicketTaker.taker).is.eql(ticketTakerKeypair.publicKey);
-        expect(loneProductTicketTaker.entityType).is.equal(2);
-        expect(loneProductTicketTaker.authorizedBy).is.eql(creatorKeypair.publicKey);
-        expect(loneProductTicketTaker.enabledSlot.toNumber()).is.greaterThan(0);
-        expect(loneProductTicketTaker.enabledTimestamp.toNumber()).is.greaterThan(0);
-        expect(loneProductTicketTaker.disabledSlot.toNumber()).is.equal(0);
-        expect(loneProductTicketTaker.disabledTimestamp.toNumber()).is.equal(0);
-      });
   
       it("Create and fund ticketed product buyer", async()=>{
         const buyerPaymentTokenAccount = await spl_token.getOrCreateAssociatedTokenAccount(
@@ -1011,6 +971,7 @@ if(RUN_STANDARD_TESTS)
         expect(purchaseTicket.payTo).is.eql(loneProduct.payTo);
         expect(purchaseTicket.authority).is.eql(buyForKeypair.publicKey);
         expect(purchaseTicket.redeemed.toNumber()).is.equal(0);
+        expect(purchaseTicket.pendingRedemption.toNumber()).is.equal(0);
         expect(purchaseTicket.remainingQuantity.toNumber()).is.equal(quantity);
         expect(purchaseTicket.nonce).is.equal(purchaseNonce);
   
@@ -1026,104 +987,171 @@ if(RUN_STANDARD_TESTS)
         
       });
 
-      it("Redeem Lone Product Ticket", async () => {
-        const quantity = 1;
-        const purchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
-        const payToTokenAccountAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, purchaseTicket.payTo, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-        const feeTokenAccountAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, feeAccountPubkey, false);
-        const [productTicketTakerPda, productTicketTakerPdaBump] = PublicKey.findProgramAddressSync(
-          [
-            anchor.utils.bytes.utf8.encode("product_taker"),
-            purchaseTicket.product.toBuffer(),
-            ticketTakerKeypair.publicKey.toBuffer(),        
-          ], program.programId);
-        const [storeTicketTakerPda, storeTicketTakerPdaBump] = PublicKey.findProgramAddressSync(
-          [
-            anchor.utils.bytes.utf8.encode("store_taker"),
-            purchaseTicket.store.toBuffer(),
-            ticketTakerKeypair.publicKey.toBuffer(),        
-          ], program.programId);
-        const [redemptionPda, redemptionPdaBump] = PublicKey.findProgramAddressSync(
-          [
-            anchor.utils.bytes.utf8.encode("redemption"),
-            purchaseTicketPda.toBuffer(),
-            Buffer.from(uIntToBytes(BigInt(purchaseTicket.remainingQuantity.toNumber()), 8, 'setBigUint'))
-          ], program.programId);
+      describe("[Redeem Lone Product Ticket]", () => 
+      {
+        let purchaseTicket;
+        let redemptionPda;
+        let redemptionPdaBump;
+
+        before(async () => {
+          return new Promise<void>(async (resolve,reject)=>{
+            purchaseTicket = await program.account
+              .purchaseTicket
+              .fetch(purchaseTicketPda)
+              .catch(reject);
+            
+            if(!purchaseTicket)
+              return;
+
+            [redemptionPda, redemptionPdaBump] = PublicKey.findProgramAddressSync(
+              [
+                anchor.utils.bytes.utf8.encode("redemption"),
+                purchaseTicketPda.toBuffer(),
+                Buffer.from(uIntToBytes(BigInt(purchaseTicket.remainingQuantity.toNumber()), 8, 'setBigUint'))
+              ], program.programId);
+            
+            resolve();
+          });
+        });
+
+        it("Create Lone Product Ticket Taker", async () => {          
+          const txSuccess = await program.methods
+            .createProductTicketTaker()
+            .accounts({
+              ticketTaker: loneProductTicketTakerPda,
+              taker: ticketTakerKeypair.publicKey,
+              product: loneProductPda,
+              productAuthority: creatorKeypair.publicKey
+            })
+            .transaction();
+    
+          const txSucceeded = await anchor.web3.sendAndConfirmTransaction(provider.connection, txSuccess, [creatorKeypair]);
+    
+          const loneProductTicketTaker = await program.account.ticketTaker.fetch(loneProductTicketTakerPda);
+          expect(loneProductTicketTaker.bump).is.equal(loneProductTicketTakerPdaBump);
+          expect(loneProductTicketTaker.version).is.equal(0);
+          expect(loneProductTicketTaker.taker).is.eql(ticketTakerKeypair.publicKey);
+          expect(loneProductTicketTaker.entityType).is.equal(2);
+          expect(loneProductTicketTaker.authorizedBy).is.eql(creatorKeypair.publicKey);
+          expect(loneProductTicketTaker.enabledSlot.toNumber()).is.greaterThan(0);
+          expect(loneProductTicketTaker.enabledTimestamp.toNumber()).is.greaterThan(0);
+          expect(loneProductTicketTaker.disabledSlot.toNumber()).is.equal(0);
+          expect(loneProductTicketTaker.disabledTimestamp.toNumber()).is.equal(0);
+        });
+
+        it("initiate redemption", async()=>{
+          const quantity = 1;  
+          const tx = await program.methods
+            .initiateRedemption(new anchor.BN(quantity))
+            .accounts({
+              redemption: redemptionPda,
+              purchaseTicket: purchaseTicketPda,
+              purchaseTicketAuthority: purchaseTicket.authority, //buyFor address
+              purchaseTicketPayment: purchaseTicket.payment,
+              purchaseTicketPaymentMint: paymentTokenMintAddress,
+            })
+            .transaction();
         
-        let ticketTakerAddress = productTicketTakerPda;
-        let ticketTakerAccount = await program.account.ticketTaker.fetchNullable(productTicketTakerPda);
-        
-        if(!ticketTakerAccount) {
-          ticketTakerAddress = storeTicketTakerPda;
-          ticketTakerAccount = await program.account.ticketTaker.fetchNullable(storeTicketTakerPda);
-        }
+          tx.feePayer = buyForKeypair.publicKey;          
+          //tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;  
 
-        expect(ticketTakerAccount).to.not.be.null;
+          const txSignature = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [buyForKeypair], {commitment: 'finalized'});
+          //console.info('redemption init signature: ', txSignature);
+    
+          const redemptionAccount = await program.account.redemption.fetch(redemptionPda);
+          expect(redemptionAccount.bump).is.equal(redemptionPdaBump);
+          expect(redemptionAccount.version).is.equal(0);
+          expect(redemptionAccount.initSlot.toNumber()).is.greaterThan(0);
+          expect(redemptionAccount.initTimestamp.toNumber()).is.greaterThan(0);
+          expect(redemptionAccount.store).is.eql(purchaseTicket.store);
+          expect(redemptionAccount.product).is.eql(purchaseTicket.product);
+          expect(redemptionAccount.productSnapshotMetadata).is.eql(purchaseTicket.productSnapshotMetadata);
+          expect(redemptionAccount.productSnapshot).is.eql(purchaseTicket.productSnapshot);
+          expect(redemptionAccount.purchaseTicket).is.eql(purchaseTicketPda);
+          expect(redemptionAccount.purchaseTicketSigner).is.eql(purchaseTicket.authority);
+          expect(redemptionAccount.buyer).is.eql(purchaseTicket.buyer);
+          expect(redemptionAccount.payTo).is.eql(purchaseTicket.payTo);
+          //expect(redemptionAccount.quantity.toNumber()).is.equal(purchaseTicket.remainingQuantity.toNumber());
+          expect(redemptionAccount.redeemQuantity.toNumber()).is.equal(quantity);
+          expect(redemptionAccount.price.toNumber()).is.equal(purchaseTicket.price.toNumber());
+          expect(redemptionAccount.ticketTaker).is.eql(PublicKey.default);
+          expect(redemptionAccount.ticketTakerSigner).is.eql(PublicKey.default);
 
-        const payToTokenAccount = await spl_token.getAccount(provider.connection, payToTokenAccountAddress);
+          const updatedPurchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
+          expect(updatedPurchaseTicket.redeemed.toNumber()).is.equal(0);
+          expect(updatedPurchaseTicket.pendingRedemption.toNumber()).is.equal(quantity);
+          expect(updatedPurchaseTicket.remainingQuantity.toNumber()).is.equal(purchaseTicket.remainingQuantity - quantity);
+        });
 
-        const tx = await program.methods
-          .redeemTicket(new anchor.BN(quantity))
+        it("take redemption", async ()=>{
+          const redemptionBefore = await program.account.redemption.fetch(redemptionPda);
+          const payToTokenAccountAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, purchaseTicket.payTo, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+          const payToTokenAccount = await spl_token.getAccount(provider.connection, payToTokenAccountAddress);        
+          const [productTicketTakerPda, productTicketTakerPdaBump] = PublicKey.findProgramAddressSync(
+            [
+              anchor.utils.bytes.utf8.encode("product_taker"),
+              purchaseTicket.product.toBuffer(),
+              ticketTakerKeypair.publicKey.toBuffer(),        
+            ], program.programId);
+          const [storeTicketTakerPda, storeTicketTakerPdaBump] = PublicKey.findProgramAddressSync(
+            [
+              anchor.utils.bytes.utf8.encode("store_taker"),
+              purchaseTicket.store.toBuffer(),
+              ticketTakerKeypair.publicKey.toBuffer(),        
+            ], program.programId);
+
+          let ticketTakerAddress = productTicketTakerPda;
+          let ticketTakerAccount = await program.account.ticketTaker.fetchNullable(productTicketTakerPda);
+          
+          if(!ticketTakerAccount) {
+            ticketTakerAddress = storeTicketTakerPda;
+            ticketTakerAccount = await program.account.ticketTaker.fetchNullable(storeTicketTakerPda);
+          }
+  
+          expect(ticketTakerAccount).to.not.be.null;
+          const tx = await program.methods
+          .takeRedemption()
           .accounts({
             purchaseTicket: purchaseTicketPda,
-            purchaseTicketSigner: purchaseTicket.authority, //buyFor address
+            redemption: redemptionPda,
+            ticketTaker: ticketTakerAddress,
+            ticketTakerSigner: ticketTakerKeypair.publicKey,
             purchaseTicketPayment: purchaseTicket.payment,
             purchaseTicketPaymentMint: paymentTokenMintAddress,
             payToTokenAccount: payToTokenAccountAddress,
             payTo: purchaseTicket.payTo,
-            programMetadata: programMetadataPda,
-            feeTokenAccount: feeTokenAccountAddress,
-            feeAccount: feeAccountPubkey,
-            ticketTaker: ticketTakerAddress,
-            ticketTakerSigner: ticketTakerKeypair.publicKey,
-            redemption: redemptionPda,
           })
-          //.signers([ticketTakerKeypair, buyForKeypair])
           .transaction();
       
-        tx.feePayer = ticketTakerKeypair.publicKey;
-        
-        //tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;
-        //tx.partialSign(buyForKeypair);
-        //tx.sign(ticketTakerKeypair);
- 
-        //const txSignature = await anchor.web3.sendAndConfirmRawTransaction(provider.connection, 
-        //  tx.serialize({ requireAllSignatures: false, verifySignatures: true }), 
-        //  {skipPreflight: true, commitment:'confirmed'});        
+          tx.feePayer = ticketTakerKeypair.publicKey;          
+          //tx.recentBlockhash = (await provider.connection.getLatestBlockhash()).blockhash;  
 
-        const txSignature = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ticketTakerKeypair, buyForKeypair], {commitment: 'finalized'});
-        console.info('ticket redemption signature: ', txSignature);
+          const txSignature = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [ticketTakerKeypair], {commitment: 'finalized'});
+          //console.info('ticket redemption signature: ', txSignature);
+
+          const redemptionAfter = await program.account.redemption.fetch(redemptionPda);
+          expect(redemptionAfter.ticketTaker).is.eql(ticketTakerAddress);
+          expect(redemptionAfter.ticketTakerSigner).is.eql(ticketTakerKeypair.publicKey);
+          expect(redemptionAfter.closeSlot.toNumber()).is.greaterThan(redemptionBefore.closeSlot.toNumber());
+          expect(redemptionAfter.closeTimestamp.toNumber()).is.greaterThan(redemptionBefore.closeTimestamp.toNumber());
+
+          const purchaseTicketPayment = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
+          expect(purchaseTicketPayment.address).is.eql(purchaseTicket.payment);
+          expect(purchaseTicketPayment.mint).is.eql(paymentTokenMintAddress);
+          expect(purchaseTicketPayment.amount).is.equal(BigInt(0));
   
-        const redemptionAccount = await program.account.redemption.fetch(redemptionPda);
-        expect(redemptionAccount.bump).is.equal(redemptionPdaBump);
-        expect(redemptionAccount.version).is.equal(0);
-        expect(redemptionAccount.openSlot.toNumber()).is.greaterThan(0);
-        expect(redemptionAccount.openTimestamp.toNumber()).is.greaterThan(0);
-        expect(redemptionAccount.store).is.eql(purchaseTicket.store);
-        expect(redemptionAccount.product).is.eql(purchaseTicket.product);
-        expect(redemptionAccount.productSnapshotMetadata).is.eql(purchaseTicket.productSnapshotMetadata);
-        expect(redemptionAccount.productSnapshot).is.eql(purchaseTicket.productSnapshot);
-        expect(redemptionAccount.puchaseTicket).is.eql(purchaseTicketPda);
-        expect(redemptionAccount.purchaseTicketSigner).is.eql(purchaseTicket.authority);
-        expect(redemptionAccount.buyer).is.eql(purchaseTicket.buyer);
-        expect(redemptionAccount.payTo).is.eql(purchaseTicket.payTo);
-        //expect(redemptionAccount.quantity.toNumber()).is.equal(purchaseTicket.remainingQuantity.toNumber());
-        expect(redemptionAccount.redeemed.toNumber()).is.equal(quantity);
-        expect(redemptionAccount.price.toNumber()).is.equal(purchaseTicket.price.toNumber());
-        expect(redemptionAccount.ticketTaker).is.eql(ticketTakerAddress);
-        expect(redemptionAccount.ticketTakerSigner).is.eql(ticketTakerKeypair.publicKey);
+          const updatedPayToTokenAccount = await spl_token.getAccount(provider.connection, payToTokenAccountAddress);
+          expect(updatedPayToTokenAccount.address).is.eql(payToTokenAccountAddress);
+          expect(updatedPayToTokenAccount.owner).is.eql(purchaseTicket.payTo);
+          expect(updatedPayToTokenAccount.mint).is.eql(paymentTokenMintAddress);
+          expect(updatedPayToTokenAccount.amount).is.equal(payToTokenAccount.amount + BigInt(purchaseTicket.price.toNumber() * redemptionBefore.redeemQuantity.toNumber()));
 
-        const purchaseTicketPayment = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
-        expect(purchaseTicketPayment.address).is.eql(purchaseTicket.payment);
-        expect(purchaseTicketPayment.mint).is.eql(paymentTokenMintAddress);
-        expect(purchaseTicketPayment.amount).is.equal(BigInt(0));
-
-        const updatedPayToTokenAccount = await spl_token.getAccount(provider.connection, payToTokenAccountAddress);
-        expect(updatedPayToTokenAccount.address).is.eql(payToTokenAccountAddress);
-        expect(updatedPayToTokenAccount.owner).is.eql(purchaseTicket.payTo);
-        expect(updatedPayToTokenAccount.mint).is.eql(paymentTokenMintAddress);
-        expect(updatedPayToTokenAccount.amount).is.equal(payToTokenAccount.amount + BigInt(purchaseTicket.price.toNumber() * quantity));
-      });
+          const updatedPurchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
+          expect(updatedPurchaseTicket.redeemed.toNumber()).is.equal(redemptionBefore.redeemQuantity.toNumber());
+          expect(updatedPurchaseTicket.pendingRedemption.toNumber()).is.equal(0);
+        });
+       
+      }); //[Redeem Lone Product Ticket]
   
     }); //lone product - ticketed redemption tests  
 

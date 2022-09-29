@@ -377,16 +377,12 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn redeem_ticket(ctx: Context<RedeemTicket>, quantity: u64) -> Result<()> {
+    pub fn initiate_redemption(ctx: Context<InitiateRedemption>, quantity: u64) -> Result<()> {
         let clock = Clock::get()?;
-        let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
-        //let fee_token_account = &ctx.accounts.fee_token_account;
-        let pay_to_token_account = &ctx.accounts.pay_to_token_account;
-        let token_program = &ctx.accounts.token_program;
-        let ticket_taker = &ctx.accounts.ticket_taker;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
+        let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
         let total_purchase_price = purchase_ticket.price * quantity;
-
+        
         if quantity <= 0 {
             return Err(ErrorCode::QuantityMustBeGreaterThanZero.into());
         }
@@ -398,29 +394,54 @@ pub mod twine {
         if purchase_ticket_payment.amount < total_purchase_price {
             return Err(ErrorCode::InsufficientFunds.into());
         }
-    
+
         let redemption = &mut ctx.accounts.redemption;
         redemption.bump = *ctx.bumps.get("redemption").unwrap();
         redemption.version = REDEMPTION_VERSION;        
-        redemption.open_slot = clock.slot;
-        redemption.open_timestamp = clock.unix_timestamp;
+        redemption.init_slot = clock.slot;
+        redemption.init_timestamp = clock.unix_timestamp;
+        redemption.close_slot=0;
+        redemption.close_timestamp = 0;
         redemption.store = purchase_ticket.store;
         redemption.product = purchase_ticket.product;
         redemption.product_snapshot_metadata = purchase_ticket.product_snapshot_metadata;
         redemption.product_snapshot = purchase_ticket.product_snapshot;
-        redemption.puchase_ticket = purchase_ticket.key();
+        redemption.purchase_ticket = purchase_ticket.key();
         redemption.buyer = purchase_ticket.buyer;
         redemption.pay_to = purchase_ticket.pay_to;
-        redemption.purchase_ticket_signer = ctx.accounts.purchase_ticket_signer.key();
+        redemption.purchase_ticket_signer = ctx.accounts.purchase_ticket_authority.key();
         //redemption.purchase_ticket_remaining_quantity = purchase_ticket.remaining_quantity;
-        redemption.redeemed = quantity;
+        redemption.redeem_quantity = quantity;
         redemption.price = purchase_ticket.price;
+
+        purchase_ticket.remaining_quantity -= quantity;
+        purchase_ticket.pending_redemption += quantity;
+
+        Ok(())
+    }
+    
+    pub fn take_redemption(ctx: Context<TakeRedemption>) -> Result<()>{
+        
+        let clock = Clock::get()?;
+        let purchase_ticket = &mut ctx.accounts.purchase_ticket;
+        let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
+        let pay_to_token_account = &ctx.accounts.pay_to_token_account;
+        let token_program = &ctx.accounts.token_program;
+        let ticket_taker = &ctx.accounts.ticket_taker;
+        let redemption = &mut ctx.accounts.redemption;
+
+        if redemption.ticket_taker != Pubkey::default() {
+            return Err(ErrorCode::AlreadyRedeemed.into());
+        }
+
+        if redemption.close_slot > 0  {
+            return Err(ErrorCode::AlreadyProcessed.into());
+        }
+
         redemption.ticket_taker = ticket_taker.key();
         redemption.ticket_taker_signer = ctx.accounts.ticket_taker_signer.key(); 
-
-        purchase_ticket.redeemed += quantity;
-        purchase_ticket.remaining_quantity -= quantity;
-
+        redemption.close_slot = clock.slot;
+        redemption.close_timestamp = clock.unix_timestamp;      
 
         let purchase_ticket_seed_bump = purchase_ticket.bump;
         let product_snapshot_metadata_key = purchase_ticket.product_snapshot_metadata;
@@ -447,7 +468,10 @@ pub mod twine {
             payment_transfer_signer,
         );
 
-        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, purchase_ticket.price * quantity)?;
+        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, redemption.price * redemption.redeem_quantity)?;
+
+        purchase_ticket.redeemed += redemption.redeem_quantity;
+        purchase_ticket.pending_redemption -= redemption.redeem_quantity;
 
         Ok(())
     }
@@ -822,7 +846,16 @@ pub struct CreateProductTicketTaker<'info> {
 }
 
 #[derive(Accounts)]
-pub struct RedeemTicket<'info> {
+pub struct InitiateRedemption<'info> {
+
+   #[account(
+        init,
+        payer = purchase_ticket_authority,
+        space = 8 + REDEMPTION_SIZE,
+        seeds = [b"redemption", purchase_ticket.key().as_ref(), &purchase_ticket.remaining_quantity.to_be_bytes()],
+        bump
+    )]
+    pub redemption: Account<'info, Redemption>,
 
     #[account(
         mut,
@@ -834,55 +867,49 @@ pub struct RedeemTicket<'info> {
             &purchase_ticket.nonce.to_be_bytes()
         ], 
         bump = purchase_ticket.bump,
-        constraint = purchase_ticket.authority == purchase_ticket_signer.key()
+        constraint = purchase_ticket.authority == purchase_ticket_authority.key()
     )]
-    pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
+    pub purchase_ticket: Account<'info, PurchaseTicket>,
 
-    #[account()]
-    pub purchase_ticket_signer: Signer<'info>,
+    #[account(mut)]
+    pub purchase_ticket_authority: Signer<'info>,
 
     #[account(
-        mut,
         token::mint = purchase_ticket_payment_mint,
         token::authority = purchase_ticket,
     )]
-    pub purchase_ticket_payment: Box<Account<'info, TokenAccount>>,
+    pub purchase_ticket_payment: Account<'info, TokenAccount>,
 
     #[account(address = crate::payment_token::ID)]
     pub purchase_ticket_payment_mint: Account<'info, Mint>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct TakeRedemption<'info> {
 
     #[account(
         mut,
-        token::mint = purchase_ticket_payment_mint,
-        token::authority = pay_to,
+        seeds = 
+        [
+            PURCHASE_TICKET_BYTES,
+            purchase_ticket.product_snapshot_metadata.key().as_ref(),
+            purchase_ticket.buyer.key().as_ref(),
+            &purchase_ticket.nonce.to_be_bytes()
+        ], 
+        bump = purchase_ticket.bump,
     )]
-    pub pay_to_token_account: Box<Account<'info, TokenAccount>>,
-
-    /// CHECK: we good
-    #[account(
-        address = purchase_ticket.pay_to.key()
-    )]
-    pub pay_to: AccountInfo<'info>,
-
-    #[account(
-        seeds = [PROGRAM_METADATA_BYTES],
-        bump=program_metadata.bump
-    )]
-    pub program_metadata: Box<Account<'info, ProgramMetadata>>,
+    pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
 
     #[account(
         mut,
-        token::mint = purchase_ticket_payment_mint,
-        token::authority = fee_account,
+        seeds = [b"redemption", purchase_ticket.key().as_ref(), &redemption.redeem_quantity.to_be_bytes()],
+        bump = redemption.bump
     )]
-    pub fee_token_account: Box<Account<'info, TokenAccount>>,
-
-    /// CHECK: address is checked
-    #[account(address = program_metadata.fee_account)]
-    pub fee_account: AccountInfo<'info>,
+    pub redemption: Box<Account<'info, Redemption>>,
 
     #[account(
-        constraint = ticket_taker.entity == purchase_ticket.product || ticket_taker.entity == purchase_ticket.store @ ErrorCode::InvalidTicketTaker
+        constraint = ticket_taker.entity == redemption.product || ticket_taker.entity == redemption.store @ ErrorCode::InvalidTicketTaker
     )]
     pub ticket_taker: Box<Account<'info, TicketTaker>>,
 
@@ -893,15 +920,26 @@ pub struct RedeemTicket<'info> {
     pub ticket_taker_signer: Signer<'info>,
 
     #[account(
-        init,
-        payer = ticket_taker_signer,
-        space = 8 + REDEMPTION_SIZE,
-        seeds = [b"redemption", purchase_ticket.key().as_ref(), &purchase_ticket.remaining_quantity.to_be_bytes()],
-        bump
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = purchase_ticket,
     )]
-    pub redemption: Box<Account<'info, Redemption>>,
+    pub purchase_ticket_payment: Account<'info, TokenAccount>,
+
+    #[account(address = crate::payment_token::ID)]
+    pub purchase_ticket_payment_mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        token::mint = purchase_ticket_payment_mint,
+        token::authority = pay_to,
+    )]
+    pub pay_to_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: we good
+    #[account(address = redemption.pay_to.key())]
+    pub pay_to: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>,
 }
 
 
@@ -995,7 +1033,7 @@ pub struct ProductSnapshotMetadata {
 }
 
 
-const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 2 + 8 + 32 + 32;
+const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 2 + 8 + 32 + 32;
 #[account]
 pub struct PurchaseTicket {
     pub bump: u8, //1;
@@ -1010,6 +1048,7 @@ pub struct PurchaseTicket {
     pub authority: Pubkey, //32;
     pub remaining_quantity: u64, //8;
     pub redeemed: u64, //8;
+    pub pending_redemption: u64, //8;
     pub nonce: u16, //2;
     pub price:u64, //8;
     pub store: Pubkey, //32;
@@ -1039,20 +1078,20 @@ const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 
 pub struct Redemption {
     pub bump: u8, //1;
     pub version: u8, //1; used for versioning schema, etc... to identify how to serialize/deserialize changes that may occur in the future
-    pub open_slot: u64, //8;
+    pub init_slot: u64, //8;
     pub close_slot: u64, //8;
-    pub open_timestamp: i64, //8; unixtimestamp
+    pub init_timestamp: i64, //8; unixtimestamp
     pub close_timestamp: i64, //8;
     pub store: Pubkey, //32;
     pub product: Pubkey, //32;
     pub product_snapshot_metadata: Pubkey, //32;
     pub product_snapshot: Pubkey, //32;
-    pub puchase_ticket: Pubkey, //32;
+    pub purchase_ticket: Pubkey, //32;
     pub purchase_ticket_signer: Pubkey, //32;
     pub buyer: Pubkey, //32;
     pub pay_to: Pubkey, //32;    
     //pub purchase_ticket_remaining_quantity: u64, //8;
-    pub redeemed: u64, //8;
+    pub redeem_quantity: u64, //8;
     pub price:u64, //8;
     pub ticket_taker: Pubkey, //32;
     pub ticket_taker_signer: Pubkey, //32;
@@ -1138,6 +1177,10 @@ pub enum ErrorCode {
     QuantityMustBeGreaterThanZero,
     #[msg("incorrect seed")]
     IncorrectSeed,
+    #[msg("already processed")]
+    AlreadyProcessed,
+    #[msg("already redeemed")]
+    AlreadyRedeemed,
 
 
 }
