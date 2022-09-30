@@ -570,7 +570,7 @@ pub struct UpdateStore<'info> {
         realloc = 8 + STORE_SIZE + data.len(),
         realloc::payer = authority,
         realloc::zero = true,
-        seeds=[STORE_SEED_BYTES, store.creator.key().as_ref(), &store.id.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, store.creator.as_ref(), &store.id.to_be_bytes()],
         bump = store.bump)]   
     pub store: Box<Account<'info, Store>>,
 
@@ -606,7 +606,7 @@ pub struct CreateStoreProduct<'info> {
 
     #[account(mut,
         constraint = store.is_authorized(&creator.key),
-        seeds=[STORE_SEED_BYTES, store.creator.key().as_ref(), &store.id.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, store.creator.as_ref(), &store.id.to_be_bytes()],
         bump=store.bump)]
     pub store: Box<Account<'info, Store>>,
   
@@ -683,7 +683,7 @@ pub struct UpdateProduct<'info> {
         realloc::payer = authority,
         realloc::zero = true,
         //has_one=authority,
-        seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()],  
+        seeds=[PRODUCT_SEED_BYTES, product.creator.as_ref(), &product.id.to_be_bytes()],  
         bump = product.bump
     )]
     pub product: Box<Account<'info, Product>>,
@@ -700,7 +700,7 @@ pub struct BuyProduct<'info> {
 
     #[account(
         mut,
-        seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()], 
+        seeds=[PRODUCT_SEED_BYTES, product.creator.as_ref(), &product.id.to_be_bytes()], 
         bump=product.bump
     )]
     pub product: Box<Account<'info, Product>>,
@@ -762,7 +762,7 @@ pub struct BuyProduct<'info> {
     pub pay_to_token_account: Account<'info, TokenAccount>,
 
     /// CHECK: we good
-    #[account(address = product.pay_to.key())]
+    #[account(address = product.pay_to)]
     pub pay_to: AccountInfo<'info>,
    
     #[account(mut)]
@@ -808,7 +808,7 @@ pub struct CreateStoreTicketTaker<'info> {
 
     #[account(
         constraint = store.is_authorized(&store_authority.key),
-        seeds=[STORE_SEED_BYTES, store.creator.key().as_ref(), &store.id.to_be_bytes()],
+        seeds=[STORE_SEED_BYTES, store.creator.as_ref(), &store.id.to_be_bytes()],
         bump=store.bump
     )]
     pub store: Account<'info, Store>,
@@ -835,7 +835,7 @@ pub struct CreateProductTicketTaker<'info> {
 
     #[account(
         constraint = product.is_authorized(&product_authority.key),
-        seeds=[PRODUCT_SEED_BYTES, product.creator.key().as_ref(), &product.id.to_be_bytes()], 
+        seeds=[PRODUCT_SEED_BYTES, product.creator.as_ref(), &product.id.to_be_bytes()], 
         bump=product.bump
     )]
     pub product: Account<'info, Product>,
@@ -862,8 +862,8 @@ pub struct InitiateRedemption<'info> {
         seeds = 
         [
             PURCHASE_TICKET_BYTES,
-            purchase_ticket.product_snapshot_metadata.key().as_ref(),
-            purchase_ticket.buyer.key().as_ref(),
+            purchase_ticket.product_snapshot_metadata.as_ref(),
+            purchase_ticket.buyer.as_ref(),
             &purchase_ticket.nonce.to_be_bytes()
         ], 
         bump = purchase_ticket.bump,
@@ -893,8 +893,8 @@ pub struct TakeRedemption<'info> {
         seeds = 
         [
             PURCHASE_TICKET_BYTES,
-            purchase_ticket.product_snapshot_metadata.key().as_ref(),
-            purchase_ticket.buyer.key().as_ref(),
+            purchase_ticket.product_snapshot_metadata.as_ref(),
+            purchase_ticket.buyer.as_ref(),
             &purchase_ticket.nonce.to_be_bytes()
         ], 
         bump = purchase_ticket.bump,
@@ -937,7 +937,7 @@ pub struct TakeRedemption<'info> {
     pub pay_to_token_account: Account<'info, TokenAccount>,
 
     /// CHECK: we good
-    #[account(address = redemption.pay_to.key())]
+    #[account(address = redemption.pay_to)]
     pub pay_to: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }
