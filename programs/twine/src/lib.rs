@@ -10,7 +10,7 @@ pub mod payment_token {
 }
 
 
-declare_id!("2oZLdzAvNDXNAGgMGhU5bxXr8K6pQ5vDbrgCZXY9bZgu");
+declare_id!("Ck5chRRitgDgfhQMGyg2CnZ5vHk3eWwV3m3tKJHy9Smw");
 
 
 const PROGRAM_VERSION: u8 = 0;
@@ -27,6 +27,9 @@ const PRODUCT_SEED_BYTES : &[u8] = b"product";
 const PRODUCT_SNAPSHOT_METADATA_BYTES: &[u8] = b"product_snapshot_metadata";
 const PRODUCT_SNAPSHOT_BYTES: &[u8] = b"product_snapshot";
 const PURCHASE_TICKET_BYTES : &[u8] = b"purchase_ticket";
+const REDEMPTION_BYTES: &[u8] = b"redemption";
+const PRODUCT_TAKER_BYTES: &[u8] = b"product_taker";
+const STORE_TAKER_BYTES: &[u8] = b"store_taker";
 
 //const PURCHASE_TRANSACTION_FEE: u64 = 10000; //.01; USDC token has 6 decimals
 //const GENERAL_TRANSACTION_FEE: u64 = 5000000; //.005; SOL coin has 9 decimals
@@ -114,8 +117,7 @@ pub mod twine {
     }
 
 
-    pub fn create_product(ctx: Context<CreateProduct>, id: u32, status: u8, //_mint_decimals: u8,
-        price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {        
+    pub fn create_product(ctx: Context<CreateProduct>, id: u32, status: u8, price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {        
         let product = &mut ctx.accounts.product;
 
         if name.len() > PRODUCT_NAME_SIZE {
@@ -148,8 +150,7 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn create_store_product(ctx: Context<CreateStoreProduct>, id: u32, status: u8, //_mint_decimals: u8,
-        price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {
+    pub fn create_store_product(ctx: Context<CreateStoreProduct>, id: u32, status: u8, price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {
         
         let store = &mut ctx.accounts.store;
         let product = &mut ctx.accounts.product;
@@ -186,8 +187,7 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, redemption_type: u8,
-        name: String, description: String, data: String) -> Result<()> {
+    pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, redemption_type: u8, name: String, description: String, data: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
         
         if product.is_snapshot {
@@ -214,7 +214,7 @@ pub mod twine {
     }    
 
 
-    pub fn buy_product(ctx: Context<BuyProduct>, _nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
+    pub fn buy_product(ctx: Context<BuyProduct>, nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
         let product = &mut ctx.accounts.product;
         let buyer = &mut ctx.accounts.buyer;
         let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
@@ -265,7 +265,7 @@ pub mod twine {
             PURCHASE_TICKET_BYTES,
             product_snapshot_metadata_key.as_ref(),
             buyer_key.as_ref(),
-            &_nonce.to_be_bytes(),
+            &nonce.to_be_bytes(),
             &[purchase_ticket_seed_bump]
         ];
         let payment_transfer_signer = &[&purchase_ticket_seeds[..]];       
@@ -315,7 +315,7 @@ pub mod twine {
         product_snapshot_metadata.timestamp = clock.unix_timestamp;
         product_snapshot_metadata.product = product.key();
         product_snapshot_metadata.product_snapshot =  product_snapshot.key();
-        product_snapshot_metadata.nonce = _nonce;
+        product_snapshot_metadata.nonce = nonce;
 
         purchase_ticket.bump = *ctx.bumps.get("purchase_ticket").unwrap();
         purchase_ticket.version = PURCHASE_TICKET_VERSION;
@@ -327,7 +327,7 @@ pub mod twine {
         purchase_ticket.buyer = buyer.key();
         purchase_ticket.pay_to = pay_to.key();
         purchase_ticket.authority = ctx.accounts.buy_for.key();
-        purchase_ticket.nonce = _nonce;
+        purchase_ticket.nonce = nonce;
         purchase_ticket.price = product.price;
         purchase_ticket.store = product.store;
         purchase_ticket.payment = purchase_ticket_payment.key();
@@ -377,7 +377,7 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn initiate_redemption(ctx: Context<InitiateRedemption>, quantity: u64) -> Result<()> {
+    pub fn initiate_redemption(ctx: Context<InitiateRedemption>, nonce: u32, quantity: u64) -> Result<()> {
         let clock = Clock::get()?;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
         let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
@@ -414,6 +414,7 @@ pub mod twine {
         redemption.redeem_quantity = quantity;
         redemption.price = purchase_ticket.price;
         redemption.status = RedemptionStatus::WAITING;
+        redemption.nonce = nonce;
 
         purchase_ticket.remaining_quantity -= quantity;
         purchase_ticket.pending_redemption += quantity;
@@ -421,8 +422,7 @@ pub mod twine {
         Ok(())
     }
     
-    pub fn take_redemption(ctx: Context<TakeRedemption>) -> Result<()>{
-        
+    pub fn take_redemption(ctx: Context<TakeRedemption>) -> Result<()>{ 
         let clock = Clock::get()?;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
         let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
@@ -474,6 +474,25 @@ pub mod twine {
 
         purchase_ticket.redeemed += redemption.redeem_quantity;
         purchase_ticket.pending_redemption -= redemption.redeem_quantity;
+
+        Ok(())
+    }
+
+    pub fn cancel_redemption(ctx: Context<CancelRedemption>) -> Result<()> {        
+        let clock = Clock::get()?;
+        let purchase_ticket = &mut ctx.accounts.purchase_ticket;
+        let redemption = &mut ctx.accounts.redemption;
+        
+        if redemption.status != RedemptionStatus::WAITING || redemption.close_timestamp > 0 {
+            return Err(ErrorCode::AlreadyProcessed.into());
+        }
+
+        purchase_ticket.remaining_quantity += redemption.redeem_quantity;
+        purchase_ticket.pending_redemption -= redemption.redeem_quantity;
+
+        redemption.status = RedemptionStatus::CANCELLED;
+        redemption.close_slot = clock.slot;
+        redemption.close_timestamp = clock.unix_timestamp;       
 
         Ok(())
     }
@@ -632,7 +651,7 @@ pub struct CreateStoreProduct<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(id: u32, status: u8, //_mint_decimals: u8,
+#[instruction(id: u32, status: u8,
     price: u64, inventory: u64, redemption_type: u8,
     name: String, description: String, data: String)]
 pub struct CreateProduct<'info> {
@@ -697,7 +716,7 @@ pub struct UpdateProduct<'info> {
 
 
 #[derive(Accounts)]
-#[instruction(_nonce: u16)]
+#[instruction( nonce: u16, quantity: u64, agreed_price: u64)]
 pub struct BuyProduct<'info> {
 
     #[account(
@@ -715,7 +734,7 @@ pub struct BuyProduct<'info> {
             PRODUCT_SNAPSHOT_METADATA_BYTES,
             product.key().as_ref(),
             buyer.key().as_ref(),
-            &_nonce.to_be_bytes()
+            &nonce.to_be_bytes()
         ],
         bump
     )]
@@ -739,7 +758,7 @@ pub struct BuyProduct<'info> {
             PURCHASE_TICKET_BYTES,
             product_snapshot_metadata.key().as_ref(),
             buyer.key().as_ref(),
-            &_nonce.to_be_bytes()], 
+            &nonce.to_be_bytes()], 
         bump
     )]
     pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
@@ -800,7 +819,7 @@ pub struct CreateStoreTicketTaker<'info> {
         init,
         payer=store_authority,
         space = 8 + TICKET_TAKER_SIZE,
-        seeds = [b"store_taker", store.key().as_ref(), taker.key().as_ref()],
+        seeds = [STORE_TAKER_BYTES, store.key().as_ref(), taker.key().as_ref()],
         bump
     )]
     pub ticket_taker: Account<'info, TicketTaker>,
@@ -827,7 +846,7 @@ pub struct CreateProductTicketTaker<'info> {
         init,
         payer=product_authority,
         space = 8 + TICKET_TAKER_SIZE,
-        seeds = [b"product_taker", product.key().as_ref(), taker.key().as_ref()],
+        seeds = [PRODUCT_TAKER_BYTES, product.key().as_ref(), taker.key().as_ref()],
         bump
     )]
     pub ticket_taker: Account<'info, TicketTaker>,
@@ -837,7 +856,7 @@ pub struct CreateProductTicketTaker<'info> {
 
     #[account(
         constraint = product.is_authorized(&product_authority.key),
-        seeds=[PRODUCT_SEED_BYTES, product.creator.as_ref(), &product.id.to_be_bytes()], 
+        seeds=[PRODUCT_SEED_BYTES, product.creator.as_ref(), &product.id.to_be_bytes()],
         bump=product.bump
     )]
     pub product: Account<'info, Product>,
@@ -848,13 +867,14 @@ pub struct CreateProductTicketTaker<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(nonce: u32, quantity: u64)]
 pub struct InitiateRedemption<'info> {
 
    #[account(
         init,
         payer = purchase_ticket_authority,
         space = 8 + REDEMPTION_SIZE,
-        seeds = [b"redemption", purchase_ticket.key().as_ref(), &purchase_ticket.remaining_quantity.to_be_bytes()],
+        seeds = [REDEMPTION_BYTES, purchase_ticket.key().as_ref(), &nonce.to_be_bytes()],
         bump
     )]
     pub redemption: Account<'info, Redemption>,
@@ -898,14 +918,14 @@ pub struct TakeRedemption<'info> {
             purchase_ticket.product_snapshot_metadata.as_ref(),
             purchase_ticket.buyer.as_ref(),
             &purchase_ticket.nonce.to_be_bytes()
-        ], 
+        ],
         bump = purchase_ticket.bump,
     )]
     pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
 
     #[account(
         mut,
-        seeds = [b"redemption", purchase_ticket.key().as_ref(), &redemption.redeem_quantity.to_be_bytes()],
+        seeds = [REDEMPTION_BYTES, purchase_ticket.key().as_ref(), &redemption.nonce.to_be_bytes()],
         bump = redemption.bump
     )]
     pub redemption: Box<Account<'info, Redemption>>,
@@ -942,6 +962,37 @@ pub struct TakeRedemption<'info> {
     #[account(address = redemption.pay_to)]
     pub pay_to: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
+}
+
+
+#[derive(Accounts)]
+pub struct CancelRedemption<'info> {
+    #[account(
+        mut,
+        close = purchase_ticket_authority,
+        seeds = [REDEMPTION_BYTES, purchase_ticket.key().as_ref(), &redemption.nonce.to_be_bytes()],
+        bump = redemption.bump,
+        constraint = redemption.purchase_ticket == purchase_ticket.key()
+    )]
+    pub redemption: Box<Account<'info, Redemption>>,
+
+    #[account(
+        mut,
+        seeds = 
+        [
+            PURCHASE_TICKET_BYTES,
+            purchase_ticket.product_snapshot_metadata.as_ref(),
+            purchase_ticket.buyer.as_ref(),
+            &purchase_ticket.nonce.to_be_bytes()
+        ], 
+        bump = purchase_ticket.bump,
+        constraint = purchase_ticket.authority == purchase_ticket_authority.key()
+    )]
+    pub purchase_ticket: Box<Account<'info, PurchaseTicket>>,
+
+    #[account(mut)]
+    pub purchase_ticket_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 
@@ -1075,7 +1126,7 @@ pub struct TicketTaker {
 
 
 
-const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 32 + 32 + 1;
+const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 32 + 32 + 1 + 4;
 #[account]
 pub struct Redemption {
     pub bump: u8, //1;
@@ -1091,13 +1142,14 @@ pub struct Redemption {
     pub purchase_ticket: Pubkey, //32;
     pub purchase_ticket_signer: Pubkey, //32;
     pub buyer: Pubkey, //32;
-    pub pay_to: Pubkey, //32;    
+    pub pay_to: Pubkey, //32;
     //pub purchase_ticket_remaining_quantity: u64, //8;
     pub redeem_quantity: u64, //8;
     pub price:u64, //8;
     pub ticket_taker: Pubkey, //32;
     pub ticket_taker_signer: Pubkey, //32;
     pub status: u8, //1;
+    pub nonce: u32, //4;
 }
 
 
@@ -1223,7 +1275,7 @@ struct RedemptionStatus;
 impl RedemptionStatus {
     const WAITING: u8 = 0;
     const REDEEMED: u8 = 1;
-    //const CANCELLED: u8 = 2;
+    const CANCELLED: u8 = 2;
 }
 
 struct EntityType;
