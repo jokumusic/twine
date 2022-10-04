@@ -413,6 +413,7 @@ pub mod twine {
         //redemption.purchase_ticket_remaining_quantity = purchase_ticket.remaining_quantity;
         redemption.redeem_quantity = quantity;
         redemption.price = purchase_ticket.price;
+        redemption.status = RedemptionStatus::WAITING;
 
         purchase_ticket.remaining_quantity -= quantity;
         purchase_ticket.pending_redemption += quantity;
@@ -441,7 +442,8 @@ pub mod twine {
         redemption.ticket_taker = ticket_taker.key();
         redemption.ticket_taker_signer = ctx.accounts.ticket_taker_signer.key(); 
         redemption.close_slot = clock.slot;
-        redemption.close_timestamp = clock.unix_timestamp;      
+        redemption.close_timestamp = clock.unix_timestamp;
+        redemption.status = RedemptionStatus::REDEEMED;
 
         let purchase_ticket_seed_bump = purchase_ticket.bump;
         let product_snapshot_metadata_key = purchase_ticket.product_snapshot_metadata;
@@ -1073,7 +1075,7 @@ pub struct TicketTaker {
 
 
 
-const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 32 + 32;
+const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 32 + 32 + 1;
 #[account]
 pub struct Redemption {
     pub bump: u8, //1;
@@ -1095,6 +1097,7 @@ pub struct Redemption {
     pub price:u64, //8;
     pub ticket_taker: Pubkey, //32;
     pub ticket_taker_signer: Pubkey, //32;
+    pub status: u8, //1;
 }
 
 
@@ -1215,6 +1218,12 @@ impl RedemptionType {
     const IMMEDIATE: u8 = 1;
     //const TICKET: u8 =  2;
     //const CONFIRMATION: u8 = 4;
+}
+struct RedemptionStatus;
+impl RedemptionStatus {
+    const WAITING: u8 = 0;
+    const REDEEMED: u8 = 1;
+    //const CANCELLED: u8 = 2;
 }
 
 struct EntityType;

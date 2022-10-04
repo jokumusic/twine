@@ -1076,6 +1076,7 @@ if(RUN_STANDARD_TESTS)
           expect(redemptionAccount.price.toNumber()).is.equal(purchaseTicket.price.toNumber());
           expect(redemptionAccount.ticketTaker).is.eql(PublicKey.default);
           expect(redemptionAccount.ticketTakerSigner).is.eql(PublicKey.default);
+          expect(redemptionAccount.status).is.equal(0);
 
           const updatedPurchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
           expect(updatedPurchaseTicket.redeemed.toNumber()).is.equal(0);
@@ -1134,6 +1135,7 @@ if(RUN_STANDARD_TESTS)
           expect(redemptionAfter.ticketTakerSigner).is.eql(ticketTakerKeypair.publicKey);
           expect(redemptionAfter.closeSlot.toNumber()).is.greaterThan(redemptionBefore.closeSlot.toNumber());
           expect(redemptionAfter.closeTimestamp.toNumber()).is.greaterThan(redemptionBefore.closeTimestamp.toNumber());
+          expect(redemptionAfter.status).is.equal(1);
 
           const purchaseTicketPayment = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
           expect(purchaseTicketPayment.address).is.eql(purchaseTicket.payment);
