@@ -493,7 +493,7 @@ pub mod twine {
 
         redemption.status = RedemptionStatus::CANCELLED;
         redemption.close_slot = clock.slot;
-        redemption.close_timestamp = clock.unix_timestamp;       
+        redemption.close_timestamp = clock.unix_timestamp;
 
         Ok(())
     }
@@ -556,6 +556,49 @@ pub mod twine {
 
         Ok(())
     }
+
+    pub fn cancel_ticket(ctx: Context<CancelTicket>, quantity: u64) -> Result<()> {
+        let ticket = &mut ctx.accounts.ticket;
+        
+        if quantity > ticket.remaining_quantity {
+            return Err(ErrorCode::InsufficientQuantity.into());
+        }
+
+        let ticket_seed_bump = ticket.bump;
+        let product_snapshot_metadata_key = ticket.product_snapshot_metadata;
+        let buyer_key = ticket.buyer;
+        let ticket_seeds = &[
+            PURCHASE_TICKET_BYTES,
+            product_snapshot_metadata_key.as_ref(),
+            buyer_key.as_ref(),
+            &ticket.nonce.to_be_bytes(),
+            &[ticket_seed_bump]
+        ];
+        let payment_transfer_signer = &[&ticket_seeds[..]];
+  
+        let ticket_payment = &ctx.accounts.ticket_payment;
+
+        //payment transfer
+        let payment_transfer_accounts = anchor_spl::token::Transfer {
+            from: ticket_payment.to_account_info(),
+            to: ctx.accounts.payment_return.to_account_info(),
+            authority: ticket.to_account_info(),
+        };
+
+        let payment_transfer_cpicontext = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            payment_transfer_accounts,
+            payment_transfer_signer,
+        );
+
+        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, ticket.price * quantity)?;
+
+        ticket.remaining_quantity -= quantity;
+        ctx.accounts.product.inventory += quantity;
+
+        Ok(())
+    }
+
 
 }
 
@@ -1113,6 +1156,48 @@ pub struct TransferTicket<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct CancelTicket<'info> {
+
+    #[account(
+        mut,
+        address = ticket.product,
+    )]
+    pub product: Box<Account<'info, Product>>,
+
+    #[account(
+        mut,
+        seeds = [
+            PURCHASE_TICKET_BYTES,
+            ticket.product_snapshot_metadata.as_ref(),
+            ticket.buyer.as_ref(),
+            &ticket.nonce.to_be_bytes()],
+        bump = ticket.bump,
+        constraint = ticket.authority == ticket_authority.key())]
+    pub ticket: Box<Account<'info, PurchaseTicket>>,
+
+    #[account(
+        mut,
+        token::mint = payment_mint,
+        token::authority = ticket,
+        address = ticket.payment
+    )]
+    pub ticket_payment: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        token::mint = payment_mint,
+    )]
+    pub payment_return: Account<'info, TokenAccount>,
+  
+    #[account(address = crate::payment_token::ID)]
+    pub payment_mint: Account<'info, Mint>,    
+
+    #[account(mut)]
+    pub ticket_authority: Signer<'info>,
+    pub token_program: Program<'info, Token>,
 }
 
 

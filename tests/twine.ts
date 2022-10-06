@@ -151,7 +151,7 @@ describe("[Twine]", () => {
     });
   });
 
-
+/*
   describe("[Program Tests]", () => {    
     it("Initialize Program", async () => {
       let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
@@ -211,9 +211,10 @@ describe("[Twine]", () => {
     });
 
   }); //program tests
-
+*/
 if(RUN_STANDARD_TESTS)
 {
+  /*
   describe("[Store Tests]", () => {
     it("Create Store", async () => {
       const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
@@ -453,7 +454,7 @@ if(RUN_STANDARD_TESTS)
     });
 
   });//store tests
-
+*/
   describe("[Lone Product Tests]", () => {
     const loneProductId = generateRandomU32();
     const updatedProductPrice = 200000;
@@ -1295,7 +1296,39 @@ if(RUN_STANDARD_TESTS)
           expect(purchaseTicketAfterCancel.remainingQuantity.toNumber()).is.equal(purchaseTicketBefore.remainingQuantity.toNumber());
           expect(purchaseTicketAfterCancel.pendingRedemption.toNumber()).is.equal(purchaseTicketBefore.pendingRedemption.toNumber());
         });
-       
+
+        it("Cancel Ticket", async() => {
+          const cancelQuantity = 1;
+          const buyerPaymentTokenAddress = await spl_token.getAssociatedTokenAddress(paymentTokenMintAddress, creatorKeypair.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+          const buyerPaymentTokenBefore = await spl_token.getAccount(provider.connection, buyerPaymentTokenAddress);
+          const purchaseTicketBefore = await program.account.purchaseTicket.fetch(purchaseTicketPda);
+          const purchaseTicketPaymentBefore = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
+
+          const tx = await program.methods
+            .cancelTicket(new anchor.BN(cancelQuantity))
+            .accounts({
+              product: purchaseTicket.product,
+              ticket: purchaseTicketPda,
+              ticketPayment: purchaseTicket.payment,
+              paymentReturn: buyerPaymentTokenAddress,
+              paymentMint: paymentTokenMintAddress,
+              ticketAuthority: buyForKeypair.publicKey,
+            })
+            .transaction();
+        
+          tx.feePayer = buyForKeypair.publicKey;
+          const txSignature = await anchor.web3.sendAndConfirmTransaction(provider.connection, tx, [buyForKeypair], {commitment: 'finalized'});
+          
+          const purchaseTicketAfter = await program.account.purchaseTicket.fetch(purchaseTicketPda);
+          expect(purchaseTicketAfter.remainingQuantity.toNumber()).is.equal(purchaseTicketBefore.remainingQuantity.toNumber() - cancelQuantity);
+          
+          const purchaseTicketPaymentAfter = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
+          expect(purchaseTicketPaymentAfter.amount).is.equal(purchaseTicketPaymentBefore.amount - BigInt(purchaseTicket.price.toNumber() * cancelQuantity));
+
+          const buyerPaymentTokenAfter = await spl_token.getAccount(provider.connection, buyerPaymentTokenAddress);
+          expect(buyerPaymentTokenAfter.amount).is.equal(buyerPaymentTokenBefore.amount + BigInt(purchaseTicket.price.toNumber() * cancelQuantity));        
+        });
+
       }); //[Redeem Lone Product Ticket]
   
     }); //lone product - ticketed redemption tests
