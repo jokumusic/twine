@@ -1303,6 +1303,7 @@ if(RUN_STANDARD_TESTS)
           const buyerPaymentTokenBefore = await spl_token.getAccount(provider.connection, buyerPaymentTokenAddress);
           const purchaseTicketBefore = await program.account.purchaseTicket.fetch(purchaseTicketPda);
           const purchaseTicketPaymentBefore = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
+          const productBefore = await program.account.product.fetch(purchaseTicket.product);
 
           const tx = await program.methods
             .cancelTicket(new anchor.BN(cancelQuantity))
@@ -1321,12 +1322,15 @@ if(RUN_STANDARD_TESTS)
           
           const purchaseTicketAfter = await program.account.purchaseTicket.fetch(purchaseTicketPda);
           expect(purchaseTicketAfter.remainingQuantity.toNumber()).is.equal(purchaseTicketBefore.remainingQuantity.toNumber() - cancelQuantity);
+
+          const productAfter = await program.account.product.fetch(purchaseTicket.product);
+          expect(productAfter.inventory.toNumber()).is.equal(productBefore.inventory.toNumber() + cancelQuantity);
           
           const purchaseTicketPaymentAfter = await spl_token.getAccount(provider.connection, purchaseTicket.payment);
           expect(purchaseTicketPaymentAfter.amount).is.equal(purchaseTicketPaymentBefore.amount - BigInt(purchaseTicket.price.toNumber() * cancelQuantity));
 
           const buyerPaymentTokenAfter = await spl_token.getAccount(provider.connection, buyerPaymentTokenAddress);
-          expect(buyerPaymentTokenAfter.amount).is.equal(buyerPaymentTokenBefore.amount + BigInt(purchaseTicket.price.toNumber() * cancelQuantity));        
+          expect(buyerPaymentTokenAfter.amount).is.equal(buyerPaymentTokenBefore.amount + BigInt(purchaseTicket.price.toNumber() * cancelQuantity));
         });
 
       }); //[Redeem Lone Product Ticket]
