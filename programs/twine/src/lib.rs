@@ -1,5 +1,6 @@
 use anchor_lang::{prelude::*, solana_program::clock::Clock};
 use anchor_spl::{
+    associated_token::AssociatedToken,
     token,
     token::{Token,TokenAccount,Mint},
 };
@@ -497,6 +498,65 @@ pub mod twine {
         Ok(())
     }
 
+    pub fn transfer_ticket(ctx: Context<TransferTicket>, nonce: u16, quantity: u64) -> Result<()> {
+        if quantity <= 0 {
+            return Err(ErrorCode::QuantityMustBeGreaterThanZero.into());
+        }
+
+        if quantity > ctx.accounts.source_ticket.remaining_quantity {
+            return Err(ErrorCode::InsufficientQuantity.into());
+        }
+
+        let source_ticket = &ctx.accounts.source_ticket;
+        let source_ticket_seed_bump = source_ticket.bump;
+        let product_snapshot_metadata_key = source_ticket.product_snapshot_metadata;
+        let buyer_key = source_ticket.buyer;
+        let source_ticket_seeds = &[
+            PURCHASE_TICKET_BYTES,
+            product_snapshot_metadata_key.as_ref(),
+            buyer_key.as_ref(),
+            &source_ticket.nonce.to_be_bytes(),
+            &[source_ticket_seed_bump]
+        ];
+        let payment_transfer_signer = &[&source_ticket_seeds[..]];
+  
+        let source_ticket_payment = &ctx.accounts.source_ticket_payment;
+        let destination_ticket_payment = &ctx.accounts.destination_ticket_payment;
+
+        //payment transfer
+        let payment_transfer_accounts = anchor_spl::token::Transfer {
+            from: source_ticket_payment.to_account_info(),
+            to: destination_ticket_payment .to_account_info(),
+            authority: source_ticket.to_account_info(),
+        };
+
+        let payment_transfer_cpicontext = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            payment_transfer_accounts,
+            payment_transfer_signer,
+        );
+
+        let _payment_transfer_result = token::transfer(payment_transfer_cpicontext, source_ticket.price * quantity)?;
+
+        ctx.accounts.destination_ticket.set_inner(ctx.accounts.source_ticket.clone().into_inner());
+        let clock = Clock::get()?;
+        let destination_ticket = &mut ctx.accounts.destination_ticket;
+        destination_ticket.bump = *ctx.bumps.get("destination_ticket").unwrap();
+        destination_ticket.nonce = nonce;        
+        destination_ticket.slot = clock.slot;
+        destination_ticket.timestamp = clock.unix_timestamp;
+        destination_ticket.buyer = ctx.accounts.source_ticket_authority.key();
+        destination_ticket.authority = ctx.accounts.destination_ticket_authority.key();
+        destination_ticket.remaining_quantity = quantity;
+        destination_ticket.redeemed = 0;
+        destination_ticket.pending_redemption = 0;
+        destination_ticket.payment = ctx.accounts.destination_ticket_payment.key();
+
+        ctx.accounts.source_ticket.remaining_quantity -= quantity;
+
+        Ok(())
+    }
+
 }
 
 
@@ -716,7 +776,7 @@ pub struct UpdateProduct<'info> {
 
 
 #[derive(Accounts)]
-#[instruction( nonce: u16, quantity: u64, agreed_price: u64)]
+#[instruction(nonce: u16, quantity: u64, agreed_price: u64)]
 pub struct BuyProduct<'info> {
 
     #[account(
@@ -993,6 +1053,66 @@ pub struct CancelRedemption<'info> {
     #[account(mut)]
     pub purchase_ticket_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+#[instruction(nonce: u16, quantity: u64)]
+pub struct TransferTicket<'info> {
+
+    #[account(
+        init,
+        payer = source_ticket_authority,
+        space = 8 + PURCHASE_TICKET_SIZE,
+        seeds = [
+            PURCHASE_TICKET_BYTES,
+            source_ticket.product_snapshot_metadata.as_ref(),
+            source_ticket_authority.key().as_ref(),
+            &nonce.to_be_bytes()],
+        bump
+    )]
+    pub destination_ticket: Box<Account<'info, PurchaseTicket>>,
+
+    #[account(
+        init,
+        payer = source_ticket_authority,
+        associated_token::mint = payment_mint,
+        associated_token::authority = destination_ticket
+    )]
+    pub destination_ticket_payment: Account<'info, TokenAccount>,
+  
+    /// CHECK: owner of the new ticket
+    #[account()]
+    pub destination_ticket_authority: AccountInfo<'info>,
+
+    #[account(
+        mut,
+        seeds = [
+            PURCHASE_TICKET_BYTES,
+            source_ticket.product_snapshot_metadata.as_ref(),
+            source_ticket.buyer.as_ref(),
+            &source_ticket.nonce.to_be_bytes()],
+        bump = source_ticket.bump,
+        constraint = source_ticket.authority == source_ticket_authority.key())]
+    pub source_ticket: Box<Account<'info, PurchaseTicket>>,
+
+    #[account(
+        mut,
+        token::mint = payment_mint,
+        token::authority = source_ticket,
+        address = source_ticket.payment
+    )]
+    pub source_ticket_payment: Account<'info, TokenAccount>,
+  
+    #[account(address = crate::payment_token::ID)]
+    pub payment_mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub source_ticket_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 
@@ -1230,6 +1350,8 @@ pub enum ErrorCode {
     InsufficientRemainingRedemptions,
     #[msg("quantity must be greater than zero")]
     QuantityMustBeGreaterThanZero,
+    #[msg("insufficient quantity")]
+    InsufficientQuantity,
     #[msg("incorrect seed")]
     IncorrectSeed,
     #[msg("already processed")]
