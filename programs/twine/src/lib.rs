@@ -233,9 +233,9 @@ pub mod twine {
 
 
     pub fn buy_product(ctx: Context<BuyProduct>, nonce: u16, quantity: u64,
-        agreed_price: u64, agreed_expiration_timestamp: i64, agreed_expiration_minutes_after_redemption: u32, agreed_expiration_minutes_after_purchase: u32) -> Result<()>{
+        agreed_price: u64, agreed_expiration_timestamp: i64, agreed_expiration_minutes_after_purchase: u32, agreed_expiration_minutes_after_redemption: u32) -> Result<()>{
         
-            let product = &mut ctx.accounts.product;
+        let product = &mut ctx.accounts.product;
         let buyer = &mut ctx.accounts.buyer;
         let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
         let product_snapshot = &mut ctx.accounts.product_snapshot;
@@ -261,6 +261,11 @@ pub mod twine {
             return Err(ErrorCode::PriceIsGreaterThanPayment.into());
         }
 
+        //msg!("expiration: {}/{}, afterPurchase: {}/{}, afterRedemption: {}/{}", 
+        //    product.expiration_timestamp, agreed_expiration_timestamp,
+        //    product.expiration_minutes_after_purchase, agreed_expiration_minutes_after_purchase,
+        //    product.expiration_minutes_after_redemption, agreed_expiration_minutes_after_redemption
+        //);
         if product.expiration_timestamp != agreed_expiration_timestamp {
             return Err(ErrorCode::AgreedExpirationDoesntMatch.into())
         }
@@ -268,7 +273,6 @@ pub mod twine {
         if product.expiration_minutes_after_purchase != agreed_expiration_minutes_after_purchase {
             return Err(ErrorCode::AgreedExpirationAfterPurchaseDoesntMatch.into())
         }
-
         if product.expiration_minutes_after_redemption != agreed_expiration_minutes_after_redemption {
             return Err(ErrorCode::AgreedExpirationAfterRedemptionDoesntMatch.into())
         }
@@ -890,7 +894,7 @@ pub struct UpdateProduct<'info> {
 
 #[derive(Accounts)]
 #[instruction(nonce: u16, quantity: u64, agreed_price: u64,
-    agreed_expiration_timestamp: i64, agreed_expiration_minutes_after_redemption: u32, agreed_expiration_minutes_after_purchase: u32)]
+    agreed_expiration_timestamp: i64, agreed_expiration_minutes_after_purchase: u32, agreed_expiration_minutes_after_redemption: u32)]
 pub struct BuyProduct<'info> {
 
     #[account(
