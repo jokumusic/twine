@@ -1465,6 +1465,8 @@ if(LOAD_MOCK_DATA)
                     new BN(productPrice), 
                     new BN(productInventory),
                     productRedemptionType,
+                    0,
+                    new anchor.BN(0),
                     productName.toLowerCase(), 
                     productDescription.toLowerCase(),
                     dataString)

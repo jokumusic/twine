@@ -11,7 +11,7 @@ pub mod payment_token {
 }
 
 
-declare_id!("Ck5chRRitgDgfhQMGyg2CnZ5vHk3eWwV3m3tKJHy9Smw");
+declare_id!("4YuP6p7UXgUMNQauAtNSmqcmNkeWYop7wxDSHe6aH4P8");
 
 //const TIME_OFFSET: u32 = 1641024000; //twine timestamp epoch is seconds since 2022-01-01. This is the number of seconds since unix timestamp 1970-01-01.
 
