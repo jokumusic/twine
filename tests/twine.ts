@@ -151,7 +151,7 @@ describe("[Twine]", () => {
     });
   });
 
-/*
+
   describe("[Program Tests]", () => {    
     it("Initialize Program", async () => {
       let programMetadata = await program.account.programMetadata.fetchNullable(programMetadataPda);
@@ -211,10 +211,10 @@ describe("[Twine]", () => {
     });
 
   }); //program tests
-*/
+
 if(RUN_STANDARD_TESTS)
 {
-  /*
+  
   describe("[Store Tests]", () => {
     it("Create Store", async () => {
       const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
@@ -321,8 +321,8 @@ if(RUN_STANDARD_TESTS)
       const productStatus = 0;
 
       const tx = await program.methods
-        .createStoreProduct(storeProductId, productStatus, //productMintDecimals, 
-        productPrice, productInventory, redemptionType, productName.toLowerCase(), productDescription.toLowerCase(), data)
+        .createStoreProduct(storeProductId, productStatus, productPrice, productInventory, redemptionType,
+          0, new anchor.BN(0), productName.toLowerCase(), productDescription.toLowerCase(), data)
         .accounts({
           //mint: storeProductMintPda,
           product: storeProductPda,
@@ -364,6 +364,8 @@ if(RUN_STANDARD_TESTS)
       expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
       expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
       expect(createdProduct.redemptionType).is.equal(redemptionType);
+      expect(createdProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(createdProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(createdProduct.name).is.equal(productName.toLowerCase());
       expect(createdProduct.description).is.equal(productDescription.toLowerCase());  
       expect(createdProduct.data).is.equal(data);
@@ -394,6 +396,7 @@ if(RUN_STANDARD_TESTS)
       //this should succeed because the owner is correct
       const txSuccess = await program.methods
       .updateProduct(updatedProductStatus, new BN(updatedProductPrice), new BN(updatedProductInventory), updatedRedemptionType,
+          0, new anchor.BN(0),
           updatedProductName.toLowerCase(), updatedProductDescription.toLowerCase(), updatedProductData)
       .accounts({
         product: storeProductPda, 
@@ -416,6 +419,8 @@ if(RUN_STANDARD_TESTS)
       expect(updatedProduct.store).is.eql(storePda); 
       expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
       expect(updatedProduct.inventory.toNumber()).is.equal(updatedProductInventory);
+      expect(updatedProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(updatedProduct.name).is.equal(updatedProductName.toLowerCase());
       expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
       expect(updatedProduct.data).is.equal(updatedProductData);
@@ -454,7 +459,7 @@ if(RUN_STANDARD_TESTS)
     });
 
   });//store tests
-*/
+
   describe("[Lone Product Tests]", () => {
     const loneProductId = generateRandomU32();
     const updatedProductPrice = 200000;
@@ -472,8 +477,8 @@ if(RUN_STANDARD_TESTS)
       const loneProductStatus = 0;
 
       const tx = await program.methods
-      .createProduct(loneProductId, loneProductStatus, //productMintDecimals,
-      productPrice, productInventory, redemptionType, productName.toLowerCase(), productDescription.toLowerCase(), data)
+      .createProduct(loneProductId, loneProductStatus, productPrice, productInventory, redemptionType,
+        0, new anchor.BN(0), productName.toLowerCase(), productDescription.toLowerCase(), data)
       .accounts({
         //mint: loneProductMintPda,
         product: loneProductPda,
@@ -501,6 +506,8 @@ if(RUN_STANDARD_TESTS)
       expect(createdProduct.price.toNumber()).is.equal(productPrice.toNumber());
       expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
       expect(createdProduct.redemptionType).is.equal(redemptionType);
+      expect(createdProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(createdProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(createdProduct.name).is.equal(productName.toLowerCase());
       expect(createdProduct.description).is.equal(productDescription.toLowerCase())    
       expect(createdProduct.data).is.equal(data);
@@ -730,6 +737,7 @@ if(RUN_STANDARD_TESTS)
     });
 
     it("Update Lone Product", async () => {
+      const updatedExpirationTimestamp = Math.floor(new Date().getTime() / 1000) + (60 * 60 * 24 * 30); //add 30 days to today's date
       const updatedProductName = productName + "-updated";
       const updatedProductDescription = productDescription + "-updated";
       
@@ -741,7 +749,7 @@ if(RUN_STANDARD_TESTS)
       //this should succeed because the owner is correct
       const txSuccess = await program.methods
       .updateProduct(updatedStatus, new BN(updatedProductPrice), new BN(updatedInventory), updatedRedemptionType, 
-        updatedProductName.toLowerCase(), updatedProductDescription.toLowerCase(), updatedData)
+        0, new anchor.BN(updatedExpirationTimestamp), updatedProductName.toLowerCase(), updatedProductDescription.toLowerCase(), updatedData)
       .accounts({
         product: loneProductPda,
         authority: creatorKeypair.publicKey,
@@ -765,6 +773,8 @@ if(RUN_STANDARD_TESTS)
       expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
       expect(updatedProduct.inventory.toNumber()).is.equal(updatedInventory);
       expect(updatedProduct.redemptionType).is.equal(updatedRedemptionType);
+      expect(updatedProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(updatedExpirationTimestamp);
       expect(updatedProduct.name).is.equal(updatedProductName.toLowerCase());
       expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
       expect(updatedProduct.data).is.equal(updatedData);
@@ -972,6 +982,7 @@ if(RUN_STANDARD_TESTS)
         expect(purchaseTicket.pendingRedemption.toNumber()).is.equal(0);
         expect(purchaseTicket.remainingQuantity.toNumber()).is.equal(purchaseQuantity);
         expect(purchaseTicket.nonce).is.equal(purchaseNonce);
+        expect(purchaseTicket.expiration.toNumber()).is.equal(loneProduct.expirationTimestamp.toNumber());
   
         const purchaseTicketPayment = await spl_token.getAccount(provider.connection, purchaseTicketPaymentAddress);
         expect(purchaseTicketPayment.address).is.eql(purchaseTicketPaymentAddress);
