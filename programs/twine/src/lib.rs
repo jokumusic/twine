@@ -416,6 +416,10 @@ pub mod twine {
             return Err(ErrorCode::InsufficientFunds.into());
         }
 
+        if purchase_ticket.expiration < clock.unix_timestamp {
+            return Err(ErrorCode::TicketIsExpired.into());
+        }
+
         let redemption = &mut ctx.accounts.redemption;
         redemption.bump = *ctx.bumps.get("redemption").unwrap();
         redemption.version = REDEMPTION_VERSION;        
@@ -458,6 +462,10 @@ pub mod twine {
 
         if redemption.close_slot > 0  {
             return Err(ErrorCode::AlreadyProcessed.into());
+        }
+
+        if purchase_ticket.expiration < clock.unix_timestamp {
+            return Err(ErrorCode::TicketIsExpired.into());
         }
 
         redemption.ticket_taker = ticket_taker.key();
@@ -527,7 +535,13 @@ pub mod twine {
             return Err(ErrorCode::InsufficientQuantity.into());
         }
 
+        let clock = Clock::get()?;
         let source_ticket = &ctx.accounts.source_ticket;
+
+        if source_ticket.expiration < clock.unix_timestamp {
+            return Err(ErrorCode::TicketIsExpired.into());
+        }
+        
         let source_ticket_seed_bump = source_ticket.bump;
         let product_snapshot_metadata_key = source_ticket.product_snapshot_metadata;
         let buyer_key = source_ticket.buyer;
@@ -1471,6 +1485,8 @@ pub enum ErrorCode {
     AlreadyRedeemed,
     #[msg("product is expired")]
     ProductIsExpired,
+    #[msg("ticket is expired")]
+    TicketIsExpired,
 
 
 }
