@@ -322,7 +322,7 @@ if(RUN_STANDARD_TESTS)
 
       const tx = await program.methods
         .createStoreProduct(storeProductId, productStatus, productPrice, productInventory, redemptionType,
-          0, new anchor.BN(0), productName.toLowerCase(), productDescription.toLowerCase(), data)
+          new anchor.BN(0), 0, 0, productName.toLowerCase(), productDescription.toLowerCase(), data)
         .accounts({
           //mint: storeProductMintPda,
           product: storeProductPda,
@@ -365,11 +365,11 @@ if(RUN_STANDARD_TESTS)
       expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
       expect(createdProduct.redemptionType).is.equal(redemptionType);
       expect(createdProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(createdProduct.expirationMinutesAfterRedemption).is.equal(0);
       expect(createdProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(createdProduct.name).is.equal(productName.toLowerCase());
       expect(createdProduct.description).is.equal(productDescription.toLowerCase());  
       expect(createdProduct.data).is.equal(data);
-
 
       const store = await program.account.store.fetch(storePda);
       expect(store.productCount.toNumber()).is.equal(1);
@@ -392,11 +392,14 @@ if(RUN_STANDARD_TESTS)
       const updatedProductInventory = 2;
       const updatedProductData = JSON.stringify({displayName: updatedProductName, displayDescription: updatedProductDescription});
       const updatedRedemptionType = 2;
+      const updatedExpiration = new Date().getTime() + (60*60*24*30);//30 days from now
+      const updatedExpirationMinutesAfterPurchase = 60*24*10;//10 days after purchase
+      const updatedExpirationMinutesAfterRedemtpion = 60*4; //4 hours after redemption
 
       //this should succeed because the owner is correct
       const txSuccess = await program.methods
       .updateProduct(updatedProductStatus, new BN(updatedProductPrice), new BN(updatedProductInventory), updatedRedemptionType,
-          0, new anchor.BN(0),
+          new anchor.BN(updatedExpiration), updatedExpirationMinutesAfterPurchase, updatedExpirationMinutesAfterRedemtpion,
           updatedProductName.toLowerCase(), updatedProductDescription.toLowerCase(), updatedProductData)
       .accounts({
         product: storeProductPda, 
@@ -419,11 +422,13 @@ if(RUN_STANDARD_TESTS)
       expect(updatedProduct.store).is.eql(storePda); 
       expect(updatedProduct.price.toNumber()).is.equal(updatedProductPrice);
       expect(updatedProduct.inventory.toNumber()).is.equal(updatedProductInventory);
-      expect(updatedProduct.expirationMinutesAfterPurchase).is.equal(0);
-      expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(0);
+      expect(updatedProduct.expirationMinutesAfterPurchase).is.equal(updatedExpirationMinutesAfterPurchase);
+      expect(updatedProduct.expirationMinutesAfterRedemption).is.equal(updatedExpirationMinutesAfterRedemtpion);
+      expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(updatedExpiration);
       expect(updatedProduct.name).is.equal(updatedProductName.toLowerCase());
       expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
       expect(updatedProduct.data).is.equal(updatedProductData);
+      
     });
 
     it("Create Store Ticket Taker", async () => {
@@ -478,7 +483,8 @@ if(RUN_STANDARD_TESTS)
 
       const tx = await program.methods
       .createProduct(loneProductId, loneProductStatus, productPrice, productInventory, redemptionType,
-        0, new anchor.BN(0), productName.toLowerCase(), productDescription.toLowerCase(), data)
+        new anchor.BN(0), 0, 0,
+        productName.toLowerCase(), productDescription.toLowerCase(), data)
       .accounts({
         //mint: loneProductMintPda,
         product: loneProductPda,
@@ -507,20 +513,11 @@ if(RUN_STANDARD_TESTS)
       expect(createdProduct.inventory.toNumber()).is.equal(productInventory.toNumber());
       expect(createdProduct.redemptionType).is.equal(redemptionType);
       expect(createdProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(createdProduct.expirationMinutesAfterRedemption).is.equal(0);
       expect(createdProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(createdProduct.name).is.equal(productName.toLowerCase());
       expect(createdProduct.description).is.equal(productDescription.toLowerCase())    
-      expect(createdProduct.data).is.equal(data);
-
-      
-      //const mintAccount = await spl_token.getMint(provider.connection, loneProductMintPda,'confirmed', TOKEN_PROGRAM_ID);
-      //expect(mintAccount.address).is.eql(loneProductMintPda)
-      //expect(mintAccount.decimals).is.equal(productMintDecimals);
-      //expect(mintAccount.supply).is.equal(BigInt(0));
-      //expect(mintAccount.freezeAuthority).is.eql(loneProductMintPda);
-      //expect(mintAccount.mintAuthority).is.eql(loneProductMintPda);
-      //expect(mintAccount.isInitialized).is.equal(true);    
-      
+      expect(createdProduct.data).is.equal(data); 
     });
 
     it("Create and fund buyer ATA for payment token - Immediate Redemption", async() => {
@@ -637,7 +634,8 @@ if(RUN_STANDARD_TESTS)
       }
 
       const buyProductIx = await program.methods
-        .buyProduct(nonce, new anchor.BN(quantity), loneProduct.price)
+        .buyProduct(nonce, new anchor.BN(quantity), loneProduct.price,
+          loneProduct.expirationTimestamp, loneProduct.expirationMinutesAfterPurchase, loneProduct.expirationMinutesAfterRedemption)
         .accounts({
           product: loneProductPda,
           productSnapshotMetadata: productSnapshotMetadataPda,
@@ -723,6 +721,8 @@ if(RUN_STANDARD_TESTS)
       expect(purchaseTicket.remainingQuantity.toNumber()).is.equal(0);
       expect(purchaseTicket.nonce).is.equal(nonce);
       expect(purchaseTicket.payment).is.eql(purchaseTicketPaymentAddress);
+      expect(purchaseTicket.expiration.toNumber()).is.equal(0);
+      expect(purchaseTicket.expirationMinutesAfterRedemption).is.equal(0);
 
       const purchaseTicketPayment = await spl_token.getAccount(provider.connection, purchaseTicketPaymentAddress);
       expect(purchaseTicketPayment.address).is.eql(purchaseTicketPaymentAddress);
@@ -749,7 +749,7 @@ if(RUN_STANDARD_TESTS)
       //this should succeed because the owner is correct
       const txSuccess = await program.methods
       .updateProduct(updatedStatus, new BN(updatedProductPrice), new BN(updatedInventory), updatedRedemptionType, 
-        0, new anchor.BN(updatedExpirationTimestamp), updatedProductName.toLowerCase(), updatedProductDescription.toLowerCase(), updatedData)
+        new anchor.BN(updatedExpirationTimestamp), 0, 0, updatedProductName.toLowerCase(), updatedProductDescription.toLowerCase(), updatedData)
       .accounts({
         product: loneProductPda,
         authority: creatorKeypair.publicKey,
@@ -774,6 +774,7 @@ if(RUN_STANDARD_TESTS)
       expect(updatedProduct.inventory.toNumber()).is.equal(updatedInventory);
       expect(updatedProduct.redemptionType).is.equal(updatedRedemptionType);
       expect(updatedProduct.expirationMinutesAfterPurchase).is.equal(0);
+      expect(updatedProduct.expirationMinutesAfterRedemption).is.equal(0);
       expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(updatedExpirationTimestamp);
       expect(updatedProduct.name).is.equal(updatedProductName.toLowerCase());
       expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
@@ -896,7 +897,8 @@ if(RUN_STANDARD_TESTS)
         }
   
         const buyProductIx = await program.methods
-          .buyProduct(purchaseNonce, new anchor.BN(purchaseQuantity), loneProduct.price)
+          .buyProduct(purchaseNonce, new anchor.BN(purchaseQuantity), loneProduct.price,
+            loneProduct.expirationTimestamp, loneProduct.expirationMinutesAfterPurchase, loneProduct.expirationMinutesAfterRedemption)
           .accounts({
             product: loneProductPda,
             productSnapshotMetadata: productSnapshotMetadataPda,
@@ -1129,10 +1131,11 @@ if(RUN_STANDARD_TESTS)
         });
 
         it("Initiate Redemption", async()=>{
-          const quantity = 1;  
+          const quantity = 1;
+          const expirationMinutes = 5;
 
           const tx = await program.methods
-            .initiateRedemption(redemptionNonce, new anchor.BN(quantity))
+            .initiateRedemption(redemptionNonce, new anchor.BN(quantity), expirationMinutes)
             .accounts({
               redemption: redemptionPda,
               purchaseTicket: purchaseTicketPda,
@@ -1168,6 +1171,7 @@ if(RUN_STANDARD_TESTS)
           expect(redemptionAccount.ticketTakerSigner).is.eql(PublicKey.default);
           expect(redemptionAccount.status).is.equal(0);
           expect(redemptionAccount.nonce).is.equal(redemptionNonce);
+          expect(redemptionAccount.takeExpiration.toNumber()).is.greaterThan(0);
 
           const updatedPurchaseTicket = await program.account.purchaseTicket.fetch(purchaseTicketPda);
           expect(updatedPurchaseTicket.redeemed.toNumber()).is.equal(0);
@@ -1266,7 +1270,7 @@ if(RUN_STANDARD_TESTS)
           //console.log(`payment balance:${purchaseTicketPayment.amount}`);
 
           const initiateRedemptionTx = await program.methods
-            .initiateRedemption(cancelRedemptionNonce,new anchor.BN(cancelRedemptionQuantity))
+            .initiateRedemption(cancelRedemptionNonce,new anchor.BN(cancelRedemptionQuantity), 0)
             .accounts({
               redemption: cancelRedemptionPda,
               purchaseTicket: purchaseTicketPda,
@@ -1464,9 +1468,10 @@ if(LOAD_MOCK_DATA)
                     //productMintDecimals,
                     new BN(productPrice), 
                     new BN(productInventory),
-                    productRedemptionType,
-                    0,
+                    productRedemptionType,                    
                     new anchor.BN(0),
+                    0,
+                    0,
                     productName.toLowerCase(), 
                     productDescription.toLowerCase(),
                     dataString)
@@ -1485,10 +1490,12 @@ if(LOAD_MOCK_DATA)
           tx = await program.methods
                 .createProduct(mockProductId, 
                     productStatus,
-                    //productMintDecimals,
                     new BN(productPrice), 
                     new BN(productInventory),
-                    productRedemptionType,
+                    productRedemptionType,                    
+                    new anchor.BN(0),
+                    0,
+                    0,
                     productName.toLowerCase(),
                     productDescription.toLowerCase(),        
                     dataString)

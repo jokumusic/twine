@@ -11,7 +11,7 @@ pub mod payment_token {
 }
 
 
-declare_id!("4YuP6p7UXgUMNQauAtNSmqcmNkeWYop7wxDSHe6aH4P8");
+declare_id!("HEoESRbqpu2XPKz7NsfkjnHvFKyNtozFbvGJeG1zkTst");
 
 //const TIME_OFFSET: u32 = 1641024000; //twine timestamp epoch is seconds since 2022-01-01. This is the number of seconds since unix timestamp 1970-01-01.
 
@@ -120,7 +120,7 @@ pub mod twine {
 
 
     pub fn create_product(ctx: Context<CreateProduct>, id: u32, status: u8, price: u64, inventory: u64, redemption_type: u8,
-        expiration_minutes_after_purchase: u32, expiration_timestamp: i64,
+        expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
         name: String, description: String, data: String) -> Result<()> {
 
         let product = &mut ctx.accounts.product;
@@ -150,6 +150,7 @@ pub mod twine {
         product.redemption_type = redemption_type;
         product.expiration_minutes_after_purchase = expiration_minutes_after_purchase;
         product.expiration_timestamp = expiration_timestamp;
+        product.expiration_minutes_after_redemption = expiration_minutes_after_redemption;
         product.name = name;
         product.description = description;
         product.data = data;
@@ -158,7 +159,7 @@ pub mod twine {
     }
 
     pub fn create_store_product(ctx: Context<CreateStoreProduct>, id: u32, status: u8, price: u64, inventory: u64, redemption_type: u8,
-        expiration_minutes_after_purchase: u32, expiration_timestamp: i64,
+        expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32, 
         name: String, description: String, data: String) -> Result<()> {
         
         let store = &mut ctx.accounts.store;
@@ -189,6 +190,7 @@ pub mod twine {
         product.redemption_type = redemption_type;
         product.expiration_minutes_after_purchase = expiration_minutes_after_purchase;
         product.expiration_timestamp = expiration_timestamp;
+        product.expiration_minutes_after_redemption = expiration_minutes_after_redemption;
         product.name = name;
         product.description = description;
         product.data = data;
@@ -199,7 +201,7 @@ pub mod twine {
     }
 
     pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, redemption_type: u8,
-        expiration_minutes_after_purchase: u32, expiration_timestamp: i64,
+        expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
         name: String, description: String, data: String) -> Result<()> {
         let product = &mut ctx.accounts.product;
         
@@ -221,6 +223,7 @@ pub mod twine {
         product.inventory = inventory;
         product.expiration_minutes_after_purchase = expiration_minutes_after_purchase;
         product.expiration_timestamp = expiration_timestamp;
+        product.expiration_minutes_after_redemption = expiration_minutes_after_redemption;
         product.name = name;
         product.description = description;
         product.data = data;
@@ -229,8 +232,10 @@ pub mod twine {
     }    
 
 
-    pub fn buy_product(ctx: Context<BuyProduct>, nonce: u16, quantity: u64, agreed_price: u64) -> Result<()>{
-        let product = &mut ctx.accounts.product;
+    pub fn buy_product(ctx: Context<BuyProduct>, nonce: u16, quantity: u64,
+        agreed_price: u64, agreed_expiration_timestamp: i64, agreed_expiration_minutes_after_redemption: u32, agreed_expiration_minutes_after_purchase: u32) -> Result<()>{
+        
+            let product = &mut ctx.accounts.product;
         let buyer = &mut ctx.accounts.buyer;
         let product_snapshot_metadata = &mut ctx.accounts.product_snapshot_metadata;
         let product_snapshot = &mut ctx.accounts.product_snapshot;
@@ -256,6 +261,18 @@ pub mod twine {
             return Err(ErrorCode::PriceIsGreaterThanPayment.into());
         }
 
+        if product.expiration_timestamp != agreed_expiration_timestamp {
+            return Err(ErrorCode::AgreedExpirationDoesntMatch.into())
+        }
+
+        if product.expiration_minutes_after_purchase != agreed_expiration_minutes_after_purchase {
+            return Err(ErrorCode::AgreedExpirationAfterPurchaseDoesntMatch.into())
+        }
+
+        if product.expiration_minutes_after_redemption != agreed_expiration_minutes_after_redemption {
+            return Err(ErrorCode::AgreedExpirationAfterRedemptionDoesntMatch.into())
+        }
+
         if product.is_snapshot {
             return Err(ErrorCode::UnableToPurchaseSnapshot.into());
         }
@@ -267,7 +284,7 @@ pub mod twine {
         if purchase_ticket.expiration > clock.unix_timestamp {
             return Err(ErrorCode::ProductIsExpired.into());
         }
-            
+   
         require_keys_eq!(pay_to.key(), product.pay_to.key());
 
         let purchase_ticket_seed_bump = *ctx.bumps.get("purchase_ticket").unwrap();
@@ -335,7 +352,7 @@ pub mod twine {
         purchase_ticket.timestamp = clock.unix_timestamp;
         purchase_ticket.product = product.key();
         purchase_ticket.product_snapshot_metadata = product_snapshot_metadata.key();
-        purchase_ticket.product_snapshot = product_snapshot.key(); 
+        purchase_ticket.product_snapshot = product_snapshot.key();
         purchase_ticket.buyer = buyer.key();
         purchase_ticket.pay_to = pay_to.key();
         purchase_ticket.authority = ctx.accounts.buy_for.key();
@@ -343,8 +360,8 @@ pub mod twine {
         purchase_ticket.price = product.price;
         purchase_ticket.store = product.store;
         purchase_ticket.payment = purchase_ticket_payment.key();
+        purchase_ticket.expiration_minutes_after_redemption = product.expiration_minutes_after_redemption;
 
-        
         if product.expiration_minutes_after_purchase > 0 {
             purchase_ticket.expiration = clock.unix_timestamp + (i64::from(product.expiration_minutes_after_purchase) * 60);
         }
@@ -398,7 +415,7 @@ pub mod twine {
         Ok(())
     }
 
-    pub fn initiate_redemption(ctx: Context<InitiateRedemption>, nonce: u32, quantity: u64) -> Result<()> {
+    pub fn initiate_redemption(ctx: Context<InitiateRedemption>, nonce: u32, quantity: u64, take_expiration_minutes: u32) -> Result<()> {
         let clock = Clock::get()?;
         let purchase_ticket = &mut ctx.accounts.purchase_ticket;
         let purchase_ticket_payment = &ctx.accounts.purchase_ticket_payment;
@@ -441,6 +458,14 @@ pub mod twine {
         redemption.status = RedemptionStatus::WAITING;
         redemption.nonce = nonce;
 
+        if purchase_ticket.expiration_minutes_after_redemption > 0 {
+            redemption.usage_expiration = clock.unix_timestamp +  (i64::from(purchase_ticket.expiration_minutes_after_redemption) * 60);
+        }
+
+        if take_expiration_minutes > 0 {
+            redemption.take_expiration = clock.unix_timestamp + (i64::from(take_expiration_minutes) * 60);
+        }
+
         purchase_ticket.remaining_quantity -= quantity;
         purchase_ticket.pending_redemption += quantity;
 
@@ -468,11 +493,19 @@ pub mod twine {
             return Err(ErrorCode::TicketIsExpired.into());
         }
 
+        if redemption.take_expiration < clock.unix_timestamp {
+            return Err(ErrorCode::TakeIsExpired.into());
+        }
+
         redemption.ticket_taker = ticket_taker.key();
         redemption.ticket_taker_signer = ctx.accounts.ticket_taker_signer.key(); 
         redemption.close_slot = clock.slot;
         redemption.close_timestamp = clock.unix_timestamp;
         redemption.status = RedemptionStatus::REDEEMED;
+
+        if purchase_ticket.expiration_minutes_after_redemption > 0 {
+            redemption.usage_expiration = clock.unix_timestamp + (i64::from(purchase_ticket.expiration_minutes_after_redemption) * 60);
+        }
 
         let purchase_ticket_seed_bump = purchase_ticket.bump;
         let product_snapshot_metadata_key = purchase_ticket.product_snapshot_metadata;
@@ -741,7 +774,7 @@ pub struct UpdateStore<'info> {
 #[derive(Accounts)]
 #[instruction(id: u32, status: u8, //_mint_decimals: u8,
     price: u64, inventory: u64, redemption_type: u8,
-    expiration_minutes_after_purchase: u32, expiration_timestamp: i64,
+    expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
     name: String, description: String, data: String)]
 pub struct CreateStoreProduct<'info> {
 /*
@@ -791,7 +824,7 @@ pub struct CreateStoreProduct<'info> {
 #[derive(Accounts)]
 #[instruction(id: u32, status: u8,
     price: u64, inventory: u64, redemption_type: u8,
-    expiration_minutes_after_purchase: u32, expiration_timestamp: i64,
+    expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
     name: String, description: String, data: String)]
 pub struct CreateProduct<'info> {
 /*
@@ -835,7 +868,7 @@ pub struct CreateProduct<'info> {
 
 #[derive(Accounts)]
 #[instruction(status: u8, price: u64, inventory: u64, redemption_type: u8,
-    expiration_minutes_after_purchase: u32, expiration_timestamp: i64,
+    expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
     name: String, description: String, data: String)]
 pub struct UpdateProduct<'info> {
     #[account(mut,
@@ -856,7 +889,8 @@ pub struct UpdateProduct<'info> {
 
 
 #[derive(Accounts)]
-#[instruction(nonce: u16, quantity: u64, agreed_price: u64)]
+#[instruction(nonce: u16, quantity: u64, agreed_price: u64,
+    agreed_expiration_timestamp: i64, agreed_expiration_minutes_after_redemption: u32, agreed_expiration_minutes_after_purchase: u32)]
 pub struct BuyProduct<'info> {
 
     #[account(
@@ -1007,7 +1041,7 @@ pub struct CreateProductTicketTaker<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(nonce: u32, quantity: u64)]
+#[instruction(nonce: u32, quantity: u64, take_expiration_minutes: u32)]
 pub struct InitiateRedemption<'info> {
 
    #[account(
@@ -1283,7 +1317,7 @@ pub struct Store{
 //pub const PRODUCT_SKU_SIZE: usize = 4+25;
 pub const PRODUCT_NAME_SIZE: usize = 100;
 pub const PRODUCT_DESCRIPTION_SIZE: usize = 200;
-pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + 32 + 32 + 32 + 8 + 8 + 1 + 4 + 8 + (4+PRODUCT_NAME_SIZE) + (4+PRODUCT_DESCRIPTION_SIZE) + 4;
+pub const PRODUCT_SIZE: usize = 1 + 1 + 1 + 32 + 32 + 32 + 4 + 8 + 1 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 4 + 4 + (4+PRODUCT_NAME_SIZE) + (4+PRODUCT_DESCRIPTION_SIZE) + 4;
 
 #[account]
 pub struct Product{
@@ -1303,8 +1337,9 @@ pub struct Product{
     pub price: u64, //8; price of product. needs to be stable, but stablecoins can die, so most likely lamports since they'll be around as long as Solana is
     pub inventory: u64, //8;
     pub redemption_type: u8, //1;
+    pub expiration_timestamp: i64, //8    
     pub expiration_minutes_after_purchase: u32, //4;
-    pub expiration_timestamp: i64, //8
+    pub expiration_minutes_after_redemption: u32, //4;    
     pub name: String, //4+100; product name
     pub description: String, //4+200; product description
     pub data: String, //4+ whatever size they pay for
@@ -1329,8 +1364,7 @@ pub struct ProductSnapshotMetadata {
     pub nonce: u16, //2;
 }
 
-
-const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 2 + 8 + 32 + 32 + 8;
+const PURCHASE_TICKET_SIZE: usize = 1 + 1 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 2 + 8 + 32 + 32 + 8 + 4;
 #[account]
 pub struct PurchaseTicket {
     pub bump: u8, //1;
@@ -1351,8 +1385,8 @@ pub struct PurchaseTicket {
     pub store: Pubkey, //32;
     pub payment: Pubkey, //32;
     pub expiration: i64, //8;
+    pub expiration_minutes_after_redemption: u32, //4;
 }
-
 
 const TICKET_TAKER_SIZE: usize = 1 + 1 + 32 + 1 + 32 + 32 + 8 + 8 + 8 + 8;
 #[account]
@@ -1369,13 +1403,12 @@ pub struct TicketTaker {
     pub disabled_timestamp: i64, //8, unix timestamp
 }
 
-
-
-const REDEMPTION_SIZE: usize = 1 + 1 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 32 + 32 + 1 + 4;
+const REDEMPTION_SIZE: usize = 1 + 1 + 4 + 8 + 8 + 8 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 8 + 8 + 32 + 32 + 1 + 8 + 8;
 #[account]
 pub struct Redemption {
-    pub bump: u8, //1;
+    pub bump: u8, //1;    
     pub version: u8, //1; used for versioning schema, etc... to identify how to serialize/deserialize changes that may occur in the future
+    pub nonce: u32, //4;
     pub init_slot: u64, //8;
     pub close_slot: u64, //8;
     pub init_timestamp: i64, //8; unixtimestamp
@@ -1394,10 +1427,9 @@ pub struct Redemption {
     pub ticket_taker: Pubkey, //32;
     pub ticket_taker_signer: Pubkey, //32;
     pub status: u8, //1;
-    pub nonce: u32, //4;
+    pub take_expiration: i64, //8;
+    pub usage_expiration: i64, //8;
 }
-
-
 
 
 /// Used as a bitwise mask for the product category
@@ -1487,8 +1519,14 @@ pub enum ErrorCode {
     ProductIsExpired,
     #[msg("ticket is expired")]
     TicketIsExpired,
-
-
+    #[msg("agreed expiration doesn't match the currently configured product setting")]
+    AgreedExpirationDoesntMatch,
+    #[msg("agreed expiration after purchase doesn't match the currently configured product setting")]
+    AgreedExpirationAfterPurchaseDoesntMatch,
+    #[msg("agreed expiration after redemption doesn't match the currently configured product setting")]
+    AgreedExpirationAfterRedemptionDoesntMatch,
+    #[msg("the ability to take has expired")]
+    TakeIsExpired,
 }
 
 impl ProgramMetadata {
@@ -1508,7 +1546,6 @@ impl Product {
         *key == self.authority || *key == self.secondary_authority
     }
 }
-
 
 struct ProductStatus;
 impl ProductStatus {

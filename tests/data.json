@@ -149,7 +149,7 @@
 			],
 			"displayName": "A Carrot",
 			"displayDescription": "Buy this carrot!",
-			"inventory": 1,
+			"inventory": 150,
 			"price": 20,
 			"rating": 5,
 			"redemptionType": 6,
