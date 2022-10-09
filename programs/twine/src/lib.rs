@@ -280,13 +280,13 @@ pub mod twine {
         if product.is_snapshot {
             return Err(ErrorCode::UnableToPurchaseSnapshot.into());
         }
+
+        if product.expiration_timestamp > 0 && product.expiration_timestamp < clock.unix_timestamp {
+            return Err(ErrorCode::ProductIsExpired.into());
+        }
         
         if purchase_ticket_payment.amount < (total_purchase_price + fee) {
             return Err(ErrorCode::InsufficientFunds.into());
-        }
-
-        if purchase_ticket.expiration > clock.unix_timestamp {
-            return Err(ErrorCode::ProductIsExpired.into());
         }
    
         require_keys_eq!(pay_to.key(), product.pay_to.key());
@@ -437,7 +437,7 @@ pub mod twine {
             return Err(ErrorCode::InsufficientFunds.into());
         }
 
-        if purchase_ticket.expiration < clock.unix_timestamp {
+        if purchase_ticket.expiration > 0 && purchase_ticket.expiration < clock.unix_timestamp {
             return Err(ErrorCode::TicketIsExpired.into());
         }
 
@@ -461,10 +461,6 @@ pub mod twine {
         redemption.price = purchase_ticket.price;
         redemption.status = RedemptionStatus::WAITING;
         redemption.nonce = nonce;
-
-        if purchase_ticket.expiration_minutes_after_redemption > 0 {
-            redemption.usage_expiration = clock.unix_timestamp +  (i64::from(purchase_ticket.expiration_minutes_after_redemption) * 60);
-        }
 
         if take_expiration_minutes > 0 {
             redemption.take_expiration = clock.unix_timestamp + (i64::from(take_expiration_minutes) * 60);
@@ -493,11 +489,11 @@ pub mod twine {
             return Err(ErrorCode::AlreadyProcessed.into());
         }
 
-        if purchase_ticket.expiration < clock.unix_timestamp {
+        if purchase_ticket.expiration > 0 && purchase_ticket.expiration < clock.unix_timestamp {
             return Err(ErrorCode::TicketIsExpired.into());
         }
 
-        if redemption.take_expiration < clock.unix_timestamp {
+        if redemption.take_expiration > 0 && redemption.take_expiration < clock.unix_timestamp {
             return Err(ErrorCode::TakeIsExpired.into());
         }
 
@@ -506,6 +502,7 @@ pub mod twine {
         redemption.close_slot = clock.slot;
         redemption.close_timestamp = clock.unix_timestamp;
         redemption.status = RedemptionStatus::REDEEMED;
+
 
         if purchase_ticket.expiration_minutes_after_redemption > 0 {
             redemption.usage_expiration = clock.unix_timestamp + (i64::from(purchase_ticket.expiration_minutes_after_redemption) * 60);
@@ -575,7 +572,7 @@ pub mod twine {
         let clock = Clock::get()?;
         let source_ticket = &ctx.accounts.source_ticket;
 
-        if source_ticket.expiration < clock.unix_timestamp {
+        if source_ticket.expiration > 0 && source_ticket.expiration < clock.unix_timestamp {
             return Err(ErrorCode::TicketIsExpired.into());
         }
         
