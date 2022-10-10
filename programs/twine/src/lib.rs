@@ -5,13 +5,12 @@ use anchor_spl::{
     token::{Token,TokenAccount,Mint},
 };
 
+declare_id!("8JPgG4xdqYGxT8VYFnMqsvxfWTxNCT7AeX7RdTisq3cG");
+
 pub mod payment_token {
     use super::*;
     declare_id!("F6g9cmPtNAec9GYBF4s9vtX6hCE9eUxnFcv3bL8WsNuj");
 }
-
-
-declare_id!("HEoESRbqpu2XPKz7NsfkjnHvFKyNtozFbvGJeG1zkTst");
 
 //const TIME_OFFSET: u32 = 1641024000; //twine timestamp epoch is seconds since 2022-01-01. This is the number of seconds since unix timestamp 1970-01-01.
 
@@ -71,7 +70,7 @@ pub mod twine {
         Ok(())
     }
     
-    pub fn create_store(ctx: Context<CreateStore>, id: u16, status: u8, name: String, description: String, data: String) -> Result<()> {
+    pub fn create_store(ctx: Context<CreateStore>, id: u16, status: u8, name: String, description: String, data: Vec<u8>) -> Result<()> {
         let store = &mut ctx.accounts.store;
 
         if name.len() > STORE_NAME_SIZE {
@@ -99,7 +98,7 @@ pub mod twine {
     }
 
 
-    pub fn update_store(ctx: Context<UpdateStore>, status: u8, name: String, description: String, data: String) -> Result<()> {
+    pub fn update_store(ctx: Context<UpdateStore>, status: u8, name: String, description: String, data: Vec<u8>) -> Result<()> {
         let store = &mut ctx.accounts.store;
 
         if name.len() > STORE_NAME_SIZE {
@@ -121,7 +120,7 @@ pub mod twine {
 
     pub fn create_product(ctx: Context<CreateProduct>, id: u32, status: u8, price: u64, inventory: u64, redemption_type: u8,
         expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
-        name: String, description: String, data: String) -> Result<()> {
+        name: String, description: String, data: Vec<u8>) -> Result<()> {
 
         let product = &mut ctx.accounts.product;
 
@@ -160,7 +159,7 @@ pub mod twine {
 
     pub fn create_store_product(ctx: Context<CreateStoreProduct>, id: u32, status: u8, price: u64, inventory: u64, redemption_type: u8,
         expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32, 
-        name: String, description: String, data: String) -> Result<()> {
+        name: String, description: String, data: Vec<u8>) -> Result<()> {
         
         let store = &mut ctx.accounts.store;
         let product = &mut ctx.accounts.product;
@@ -202,7 +201,7 @@ pub mod twine {
 
     pub fn update_product(ctx: Context<UpdateProduct>, status: u8, price: u64, inventory: u64, redemption_type: u8,
         expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
-        name: String, description: String, data: String) -> Result<()> {
+        name: String, description: String, data: Vec<u8>) -> Result<()> {
         let product = &mut ctx.accounts.product;
         
         if product.is_snapshot {
@@ -730,7 +729,7 @@ pub struct ChangeFeeAccount<'info> {
 
 
 #[derive(Accounts)]
-#[instruction(id: u16, status: u8, name: String, description: String, data: String)]
+#[instruction(id: u16, status: u8, name: String, description: String, data: Vec<u8>)]
 pub struct CreateStore<'info> {
     #[account(init,
         payer=creator,
@@ -755,7 +754,7 @@ pub struct CreateStore<'info> {
 
 
 #[derive(Accounts)]
-#[instruction(status: u8, name: String, description: String, data: String)]
+#[instruction(status: u8, name: String, description: String, data: Vec<u8>)]
 pub struct UpdateStore<'info> {
     #[account(mut,
         constraint = store.is_authorized(&authority.key),
@@ -776,7 +775,7 @@ pub struct UpdateStore<'info> {
 #[instruction(id: u32, status: u8, //_mint_decimals: u8,
     price: u64, inventory: u64, redemption_type: u8,
     expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
-    name: String, description: String, data: String)]
+    name: String, description: String, data: Vec<u8>)]
 pub struct CreateStoreProduct<'info> {
 /*
     #[account(
@@ -826,7 +825,7 @@ pub struct CreateStoreProduct<'info> {
 #[instruction(id: u32, status: u8,
     price: u64, inventory: u64, redemption_type: u8,
     expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
-    name: String, description: String, data: String)]
+    name: String, description: String, data: Vec<u8>)]
 pub struct CreateProduct<'info> {
 /*
     #[account(
@@ -870,7 +869,7 @@ pub struct CreateProduct<'info> {
 #[derive(Accounts)]
 #[instruction(status: u8, price: u64, inventory: u64, redemption_type: u8,
     expiration_timestamp: i64, expiration_minutes_after_purchase: u32, expiration_minutes_after_redemption: u32,
-    name: String, description: String, data: String)]
+    name: String, description: String, data: Vec<u8>)]
 pub struct UpdateProduct<'info> {
     #[account(mut,
         constraint = product.is_authorized(&authority.key),
@@ -1304,7 +1303,7 @@ pub struct Store{
     pub product_count: u64, //8; tracks product count.
     pub name: String, //4+100; eventually used for indexing and querying
     pub description: String, //4+200; eventually used for indexing and querying    
-    pub data: String, //4+ whatever size they pay for
+    pub data: Vec<u8>, //4+ whatever size they pay for
     
     /* UNDECIDED STUFF */
     //pub category: u64, //64; bitwise AND masked identifier  
@@ -1343,7 +1342,7 @@ pub struct Product{
     pub expiration_minutes_after_redemption: u32, //4;    
     pub name: String, //4+100; product name
     pub description: String, //4+200; product description
-    pub data: String, //4+ whatever size they pay for
+    pub data: Vec<u8>, //4+ whatever size they pay for
 
     /* UNDECIDED STUFF */
     //pub sku: String, //4+25; This gives the ability to relate the product to a sku in some catalog - not used natively. most won't have this, store it in another account if needed

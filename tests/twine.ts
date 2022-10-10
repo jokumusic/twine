@@ -8,10 +8,14 @@ import { BN } from "bn.js";
 import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAccount, getOrCreateAssociatedTokenAccount, Account} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
 import * as data from './data.json';
-import { compress, decompress, trimUndefined, trimUndefinedRecursively } from 'compress-json';
+import * as brotli from 'brotli';
 import * as tokenFaucetIdl from "./tokenfaucet.json";
 import type { Tokenfaucet }  from "./tokenfaucet.ts";
 import TransactionFactory from "@project-serum/anchor/dist/cjs/program/namespace/transaction";
+
+const RUN_STANDARD_TESTS = true;
+const LOAD_MOCK_DATA = false;
+
 
 const generateRandomU16 = () => {
   return Math.floor(Math.random() * Math.pow(2,16));
@@ -35,9 +39,20 @@ const toBytes = (data, type) =>
   type == "u64" ? uIntToBytes(BigInt(data), 8, "setBigUint")
                 : `Not Sure about type - ${type}`
 
+function compress(o){
+  const compressedData = brotli.compress(Buffer.from(JSON.stringify(o)), {
+    mode: 1, // 0 = generic, 1 = text, 2 = font (WOFF2)
+    quality: 10, // 0 - 11
+    lgwin: 22, // window size
+  });
+  return Buffer.from(compressedData);
+}
 
-const RUN_STANDARD_TESTS = true;
-const LOAD_MOCK_DATA = false;
+function decompress(s) {
+  const decompressedData = brotli.decompress(s);
+  const json = Buffer.from(decompressedData).toString();
+  return JSON.parse(json);
+}
 
 const PURCHASE_TRANSACTION_FEE = 10000;
 ///All of the following tests are oriented around a user program on a mobile/web app interacting with the program.
@@ -217,7 +232,7 @@ if(RUN_STANDARD_TESTS)
   
   describe("[Store Tests]", () => {
     it("Create Store", async () => {
-      const data = JSON.stringify(compress({displayName: storeName, displayDescription: storeDescription}));
+      const data = compress({displayName: storeName, displayDescription: storeDescription});
       const storeStatus = 1;
 
       const tx = await program.methods
@@ -243,7 +258,7 @@ if(RUN_STANDARD_TESTS)
       expect(createdStore.name).is.equal(storeName.toLowerCase());
       expect(createdStore.description).is.eql(storeDescription.toLowerCase());
       expect(createdStore.productCount.toNumber()).is.equal(0);  
-      expect(createdStore.data).is.equal(data);
+      expect(createdStore.data).is.eql(data);
       
     });
 
@@ -252,7 +267,7 @@ if(RUN_STANDARD_TESTS)
       const updatedStoreName = storeName + "-updated";
       const updatedStoreDescription = storeDescription + "-updated";
       const updatedStoreStatus = 1;
-      const data = JSON.stringify({displayName: updatedStoreName, displayDescription: updatedStoreDescription});
+      const data = compress({displayName: updatedStoreName, displayDescription: updatedStoreDescription});
 
       //this should succeed because the owner is correct
       const tx = await program.methods
@@ -285,7 +300,7 @@ if(RUN_STANDARD_TESTS)
       const updatedStoreName = storeName + "-updated-2";
       const updatedStoreDescription = storeDescription + "-updated-2";
       const updatedStoreStatus = 1;
-      const data = JSON.stringify({displayName: updatedStoreName, displayDescription: updatedStoreDescription});
+      const data = compress({displayName: updatedStoreName, displayDescription: updatedStoreDescription});
 
       //this should succeed because the owner is correct
       const tx = await program.methods
@@ -316,7 +331,7 @@ if(RUN_STANDARD_TESTS)
 
     it("Create Store Product", async () => {    
       //const productMintDecimals = 3;
-      const data = JSON.stringify({displayName: productName, displayDescription: productDescription});
+      const data = compress({displayName: productName, displayDescription: productDescription});
       const redemptionType = 1;
       const productStatus = 0;
 
@@ -369,7 +384,7 @@ if(RUN_STANDARD_TESTS)
       expect(createdProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(createdProduct.name).is.equal(productName.toLowerCase());
       expect(createdProduct.description).is.equal(productDescription.toLowerCase());  
-      expect(createdProduct.data).is.equal(data);
+      expect(createdProduct.data).is.eql(data);
 
       const store = await program.account.store.fetch(storePda);
       expect(store.productCount.toNumber()).is.equal(1);
@@ -390,7 +405,7 @@ if(RUN_STANDARD_TESTS)
       const updatedProductDescription = productDescription + "-updated";
       const updatedProductPrice = 200000;
       const updatedProductInventory = 2;
-      const updatedProductData = JSON.stringify({displayName: updatedProductName, displayDescription: updatedProductDescription});
+      const updatedProductData = compress({displayName: updatedProductName, displayDescription: updatedProductDescription});
       const updatedRedemptionType = 2;
       const updatedExpiration = new Date().getTime() + (60*60*24*30);//30 days from now
       const updatedExpirationMinutesAfterPurchase = 60*24*10;//10 days after purchase
@@ -427,7 +442,7 @@ if(RUN_STANDARD_TESTS)
       expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(updatedExpiration);
       expect(updatedProduct.name).is.equal(updatedProductName.toLowerCase());
       expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
-      expect(updatedProduct.data).is.equal(updatedProductData);
+      expect(updatedProduct.data).is.eql(updatedProductData);
       
     });
 
@@ -477,7 +492,7 @@ if(RUN_STANDARD_TESTS)
 
     it("Create Lone Product - Immediate Redemption", async () => {    
       //const productMintDecimals = 3;
-      const data = JSON.stringify({displayName: productName, displayDescription: productDescription});
+      const data = compress({displayName: productName, displayDescription: productDescription});
       const redemptionType = 1; //immediate
       const loneProductStatus = 0;
 
@@ -517,7 +532,7 @@ if(RUN_STANDARD_TESTS)
       expect(createdProduct.expirationTimestamp.toNumber()).is.equal(0);
       expect(createdProduct.name).is.equal(productName.toLowerCase());
       expect(createdProduct.description).is.equal(productDescription.toLowerCase())    
-      expect(createdProduct.data).is.equal(data); 
+      expect(createdProduct.data).is.eql(data); 
     });
 
     it("Create and fund buyer ATA for payment token - Immediate Redemption", async() => {
@@ -697,7 +712,7 @@ if(RUN_STANDARD_TESTS)
       expect(productSnapshot.redemptionType).is.equal(loneProduct.redemptionType);
       expect(productSnapshot.name).is.equal(loneProduct.name);
       expect(productSnapshot.description).is.equal(loneProduct.description)    
-      expect(productSnapshot.data).is.equal(loneProduct.data);
+      expect(productSnapshot.data).is.eql(loneProduct.data);
 
       const loneProductAfterPurchase = await program.account.product.fetch(loneProductPda);
       expect(loneProductAfterPurchase.isSnapshot).is.equal(false); 
@@ -741,7 +756,7 @@ if(RUN_STANDARD_TESTS)
       const updatedProductName = productName + "-updated";
       const updatedProductDescription = productDescription + "-updated";
       
-      const updatedData = JSON.stringify({displayName: updatedProductName, displayDescription: updatedProductDescription});
+      const updatedData = compress({displayName: updatedProductName, displayDescription: updatedProductDescription});
       const updatedStatus = 0;//active
       const updatedInventory = 3;
       const updatedRedemptionType = 2; //ticketed
@@ -778,7 +793,7 @@ if(RUN_STANDARD_TESTS)
       expect(updatedProduct.expirationTimestamp.toNumber()).is.equal(updatedExpirationTimestamp);
       expect(updatedProduct.name).is.equal(updatedProductName.toLowerCase());
       expect(updatedProduct.description).is.equal(updatedProductDescription.toLowerCase());
-      expect(updatedProduct.data).is.equal(updatedData);
+      expect(updatedProduct.data).is.eql(updatedData);
     });
 
     
@@ -960,7 +975,7 @@ if(RUN_STANDARD_TESTS)
         expect(productSnapshot.redemptionType).is.equal(loneProduct.redemptionType);
         expect(productSnapshot.name).is.equal(loneProduct.name);
         expect(productSnapshot.description).is.equal(loneProduct.description)    
-        expect(productSnapshot.data).is.equal(loneProduct.data);
+        expect(productSnapshot.data).is.eql(loneProduct.data);
   
         const loneProductAfterPurchase = await program.account.product.fetch(loneProductPda);
         expect(loneProductAfterPurchase.isSnapshot).is.equal(false); 
@@ -1384,14 +1399,9 @@ if(LOAD_MOCK_DATA)
         //console.log('-', storeId, ':', mockStorePda.toBase58());
         const storeName = store.displayName;
         const storeDescription = store.displayDescription;
-
-        trimUndefined(store);
-        const compressedStore = compress(store);
-        //console.log('compressedStore: ', compressedStore);
-        const dataString = JSON.stringify(compressedStore);
-        //console.log('dataString: ', dataString);
+        const data = compress(store);
         const tx = await program.methods
-        .createStore(storeId, storeStatus, storeName.toLowerCase(), storeDescription.toLowerCase(), dataString)
+        .createStore(storeId, storeStatus, storeName.toLowerCase(), storeDescription.toLowerCase(), data)
         .accounts({
             store: mockStorePda,
             creator: creatorKeypair.publicKey,
@@ -1415,8 +1425,8 @@ if(LOAD_MOCK_DATA)
         expect(createdStore.tag.toNumber()).is.equal(0);
         expect(createdStore.name).is.equal(storeName.toLowerCase());
         expect(createdStore.description).is.eql(storeDescription.toLowerCase());
-        expect(createdStore.productCount.toNumber()).is.equal(0);  
-        expect(createdStore.data).is.equal(dataString); 
+        expect(createdStore.productCount.toNumber()).is.equal(0);
+        expect(createdStore.data).is.eql(data);
       }
 
       expect(loadedStores).is.equal(data.stores.length);
@@ -1456,9 +1466,7 @@ if(LOAD_MOCK_DATA)
             Buffer.from(uIntToBytes(mockStoreId,2,"setUint"))
           ], program.programId);
        
-        trimUndefined(product);
-        const compressedProduct= compress(product);        
-        const dataString = JSON.stringify(compressedProduct);       
+        const data = compress(product);  
         let tx = null;
 
         if(mockStoreId){
@@ -1474,7 +1482,7 @@ if(LOAD_MOCK_DATA)
                     0,
                     productName.toLowerCase(), 
                     productDescription.toLowerCase(),
-                    dataString)
+                    data)
                 .accounts({
                   //mint: mockProductMintKeypair.publicKey,
                   product: mockProductPda,
@@ -1498,7 +1506,7 @@ if(LOAD_MOCK_DATA)
                     0,
                     productName.toLowerCase(),
                     productDescription.toLowerCase(),        
-                    dataString)
+                    data)
                 .accounts({
                   //mint: mockProductMintKeypair.publicKey,
                   product: mockProductPda,
@@ -1537,7 +1545,7 @@ if(LOAD_MOCK_DATA)
         expect(createdProduct.redemptionType).is.equal(productRedemptionType);
         expect(createdProduct.name).is.equal(productName.toLowerCase());
         expect(createdProduct.description).is.equal(productDescription.toLowerCase());
-        expect(createdProduct.data).is.equal(dataString);
+        expect(createdProduct.data).is.eql(data);
       }
 
       expect(loadedProducts).is.equal(data.products.length);

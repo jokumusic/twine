@@ -1,191 +1,216 @@
 {
-	"stores": [
-		{
-			"id": "m1fPQuKFCUM4",
-			"img": "https://cryptosrus.com/wp-content/uploads/2021/12/Anatoly-Yakovenko-of-Solana-Reveals-Why-Were-Not-in-a-Crypto-Bubble.jpg",
-			"displayName": "Anatoly Yakovenko Official",
-			"displayDescription": "Hi! Come watch me eat glass!",
-			"twitter": "https://twitter.com/aeyakovenko",
-			"instagram": "https://www.instagram.com/anatolyyakovenko.sola/",
-			"rating": 5,
-			"wiki": "https://everipedia.org/wiki/lang_en/anatoly-yakovenko"
-		},
-		{
-			"id": "VsGTwYWFzjDO",
-			"img": "https://www.dualipa.com/wp-content/uploads/2019/10/DONT_START_NOW.jpg",
-			"displayName": "Dua Lipa Official",
-			"displayDescription": "This is the official Dua Lipa store!",
-			"twitter": "https://twitter.com/DUALIPA",
-			"instagram": "https://www.instagram.com/dualipa",
-			"facebook": "https://www.facebook.com/DuaLipa",
-			"web": "https://www.dualipa.com/",
-			"wiki": "https://en.wikipedia.org/wiki/Dua_Lipa",
-			"rating": 4.2
-		},
-		{
-			"id": "WvgIJTJmjGJz",
-			"img": "https://theworldunplugged.files.wordpress.com/2010/11/screen-shot-2010-12-07-at-1-35-48-pm.png",
-			"displayName": "Busy Media Inc.",
-			"displayDescription": "Busy Media Inc. is the leading distributor of music, videos, books and art!",
-			"twitter": "https://",
-			"instagram": "https://",
-			"web": "https://",
-			"rating": 2.9
-		},
-		{
-			"id": "TvGFgAJ6qzf7",
-			"img": "https://media.gettyimages.com/vectors/clothes-and-accessories-related-vector-banner-design-concept-modern-vector-id1341159950?k=20&m=1341159950&s=612x612&w=0&h=JQiJzyVQEH8vtbGM4LCVbW2bC6yqJRu3vDM6Bws6qp8=",
-			"displayName": "Trendy Clothing Co.",
-			"displayDescription": "All the trendy modern, old, contemporary clothes are here!",
-			"twitter": "https://",
-			"web": "https://",
-			"rating": 3.5
-		},
-		{
-			"id": "PNpJC8pYFxjG",
-			"img": "https://images-na.ssl-images-amazon.com/images/G/01/gc/designs/livepreview/amazon_dkblue_noto_email_v2016_us-main._CB468775337_.png",
-			"displayName": "Amazon",
-			"displayDescription": "Official Amazon Store",
-			"twitter": "https://twitter.com/amazon",
-			"web": "https://amazon.com",
-			"rating": 3.8
-		},
-		{
-			"id": "FFdwdYrsnm7l",
-			"img": "https://m.media-amazon.com/images/M/MV5BNDVkYjU0MzctMWRmZi00NTkxLTgwZWEtOWVhYjZlYjllYmU4XkEyXkFqcGdeQXVyNTA4NzY1MzY@._V1_.jpg",
-			"displayName": "Friends Official",
-			"displayDescription": "Your F.R.I.E.N.D.S store",
-			"web": "https://www.warnerbros.com/tv/friends",
-			"instagram": "https://www.instagram.com/friends/",
-			"rating": 5
-		},
-		{
-			"id": "WI1zsKHifGGy",
-			"img": "https://images.indianexpress.com/2017/06/tom-cruise-759.jpg?w=389",
-			"displayName": "Tom Cruise Official",
-			"displayDescription": "I am THE CRUISE, not the Cruz...",
-			"twitter": "https://twitter.com/tomcruise",
-			"instagram": "https://www.instagram.com/tomcruise",
-			"facebook": "https://www.facebook.com/officialtomcruise",
-			"rating": 2
-		},
-		{
-			"id": "dCdFiBvQ5YUb",
-			"img": "https://cdn.mos.cms.futurecdn.net/5StAbRHLA4ZdyzQZVivm2c-1200-80.jpg.webp",
-			"displayName": "Walmart",
-			"displayDescription": "Save money. Live better.",
-			"twitter": "https://twitter.com/Walmart",
-			"web": "https://walmart.com",
-			"rating": 2
-		}
-	],
-	"products": [
-		{
-			"storeId": "TvGFgAJ6qzf7",
-			"img": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Compactcassette.jpg/1200px-Compactcassette.jpg",
-			"images": [
-				"https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Compactcassette.jpg/1200px-Compactcassette.jpg",
-				""
-			],
-			"displayName": "A cassette tape",
-			"displayDescription": "Find a walkman and do aerobics to this",
-			"inventory": 25,
-			"price": 8,
-			"rating": 2,
-			"redemptionType": 6,
-			"status": 0
-		},
-		{
-			"storeId": "WI1zsKHifGGy",
-			"img": "https://ae01.alicdn.com/kf/H397b8da9ba03499594aedaa380e1bbe87.jpg",
-			"images": [
-				"https://ae01.alicdn.com/kf/H397b8da9ba03499594aedaa380e1bbe87.jpg",
-				"https://ae01.alicdn.com/kf/H14afc8d1acaf481fbc8089cdb6ed2564I/1-6-Scale-Tom-Cruise-Head-Sculpt-for-12inch-Action-Figure-Body-Doll-Accessories-Collectible.jpg_Q90.jpg_.webp"
-			],
-			"displayName": "My Head Sculpture",
-			"displayDescription": "Look at me everywhere you go",
-			"inventory": 500,
-			"price": 2500,
-			"rating": 2,
-			"redemptionType": 6,
-			"status": 0
-		},
-		{
-			"storeId": "m1fPQuKFCUM4",
-			"img": "https://i.etsystatic.com/25894060/r/il/749abc/3333286358/il_794xN.3333286358_o0jb.jpg",
-			"images": [
-				"https://i.etsystatic.com/25894060/r/il/749abc/3333286358/il_794xN.3333286358_o0jb.jpg",
-				"https://i.etsystatic.com/25894060/r/il/0ac98f/3380964243/il_794xN.3380964243_p07y.jpg"
-			],
-			"displayName": "Solana Baseball Cap",
-			"displayDescription": "SOL|Cryptocurrency HAT|Investor Gift - Adult Unisex Size",
-			"inventory": 1000,
-			"price": 25,
-			"rating": 5,
-			"redemptionType": 6,
-			"status": 0
-		},
-		{
-			"img": "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
-			"images": [
-				"https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
-				"https://c-fa.cdn.smule.com/rs-s41/arr/7a/9f/68d4e3f8-7c95-4ccf-9200-e63041a6c43f_1024.jpg",
-				"https://is2-ssl.mzstatic.com/image/thumb/Music4/v4/2e/55/7f/2e557f05-4b1c-c1f6-e044-28044b71fa76/05099922876454.jpg/1200x1200bf-60.jpg"
-			],
-			"displayName": "Katie Perry - I Kissed A Girl",
-			"displayDescription": "Purchase song from official Katy Perry Store",
-			"inventory": 2000000,
-			"price": 1,
-			"rating": 3,
-			"redemptionType": 1,
-			"status": 0
-		},
-		{
-			"img": "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
-			"images": [
-				"https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
-				"https://medcitynews.com/wp-content/uploads/2017/11/GettyImages-166106089-600x464.jpg",
-				"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNolczTgLzXCGrVN3vDOCA-NDUeHVCJKQCjA&usqp=CAU"
-			],
-			"displayName": "A Carrot",
-			"displayDescription": "Buy this carrot!",
-			"inventory": 150,
-			"price": 20,
-			"rating": 5,
-			"redemptionType": 6,
-			"status": 0
-		},
-		{
-			"img": "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
-			"images": [
-				"https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
-				"https://miro.medium.com/max/1400/1*mT-FFEblDmNQegY4He_3YA.jpeg",
-				"https://solana.blog/wp-content/uploads/sites/8/2021/09/Screen-Shot-2021-09-21-at-11.02.23-am.png",
-				"https://pbs.twimg.com/media/FZLx_J0WIAIE0jZ?format=jpg&name=4096x4096",
-				"https://i.ytimg.com/vi/scorFcEXZD8/maxresdefault.jpg"
-			],
-			"displayName": "Solana Breakpoint 2022 Ticket",
-			"displayDescription": "This ticket is good for entry at Solana Breakpoint 2022!",
-			"inventory": 10000,
-			"price": 1000,
-			"redemptionType": 2,
-			"status": 0
-		},
-		{
-			"storeId": "dCdFiBvQ5YUb",
-			"img": "https://i5.walmartimages.com/asr/88b8c48b-3ea7-4e4e-b8f3-997171733faf.c0b2ecdfa3441e9e74d0659c1e1d65f6.jpeg?odnHeight=612&odnWidth=612&odnBg=FFFFFF",
-			"images": [
-				"https://i5.walmartimages.com/asr/88b8c48b-3ea7-4e4e-b8f3-997171733faf.c0b2ecdfa3441e9e74d0659c1e1d65f6.jpeg?odnHeight=612&odnWidth=612&odnBg=FFFFFF",
-				"https://www.kroger.com/product/images/large/right/0003760011544",
-				"https://www.spam.com/wp-content/uploads/2019/08/nutrition-label-less-sodium.jpg"				
-			],
-			"displayName": "SPAM Classic 25% Less Sodium - 12 Oz",
-			"displayDescription": "The real stuff just tastes better...",
-			"inventory": 250,
-			"price": 4,
-			"rating": 4,
-			"redemptionType": 2,
-			"status": 0
-		}
-	]
+    "stores": [{
+            "id": "m1fPQuKFCUM4",
+            "img": "https://cryptosrus.com/wp-content/uploads/2021/12/Anatoly-Yakovenko-of-Solana-Reveals-Why-Were-Not-in-a-Crypto-Bubble.jpg",
+            "displayName": "Anatoly Yakovenko Official",
+            "displayDescription": "Hi! Come watch me eat glass!",
+            "socials": [{
+                    "name": "twitter",
+                    "url": "https://twitter.com/aeyakovenko"
+                }, {
+                    "name": "instagram",
+                    "url": "https://www.instagram.com/anatolyyakovenko.sola/"
+                }, {
+                    "name": "wiki",
+                    "url": "https://everipedia.org/wiki/lang_en/anatoly-yakovenko"
+                }
+            ],
+            "rating": 5
+        }, {
+            "id": "VsGTwYWFzjDO",
+            "img": "https://www.dualipa.com/wp-content/uploads/2019/10/DONT_START_NOW.jpg",
+            "displayName": "Dua Lipa Official",
+            "displayDescription": "This is the official Dua Lipa store!",
+            "socials": [{
+                    "name": "twitter",
+                    "url": "https://twitter.com/DUALIPA"
+                }, {
+                    "name": "instagram",
+                    "url": "https://www.instagram.com/dualipa"
+                }, {
+                    "name": "facebook",
+                    "url": "https://www.facebook.com/DuaLipa"
+                }, {
+                    "name": "web",
+                    "url": "https://www.dualipa.com/"
+                }, {
+                    "name": "wiki",
+                    "url": "https://en.wikipedia.org/wiki/Dua_Lipa"
+                }
+            ],
+            "rating": 4.2
+        }, {
+            "id": "WvgIJTJmjGJz",
+            "img": "https://theworldunplugged.files.wordpress.com/2010/11/screen-shot-2010-12-07-at-1-35-48-pm.png",
+            "displayName": "Busy Media Inc.",
+            "displayDescription": "Busy Media Inc. is the leading distributor of music, videos, books and art!",
+            "rating": 2.9
+        }, {
+            "id": "TvGFgAJ6qzf7",
+            "img": "https://media.gettyimages.com/vectors/clothes-and-accessories-related-vector-banner-design-concept-modern-vector-id1341159950?k=20&m=1341159950&s=612x612&w=0&h=JQiJzyVQEH8vtbGM4LCVbW2bC6yqJRu3vDM6Bws6qp8=",
+            "displayName": "Trendy Clothing Co.",
+            "displayDescription": "All the trendy modern, old, contemporary clothes are here!",
+            "rating": 3.5
+        }, {
+            "id": "PNpJC8pYFxjG",
+            "img": "https://images-na.ssl-images-amazon.com/images/G/01/gc/designs/livepreview/amazon_dkblue_noto_email_v2016_us-main._CB468775337_.png",
+            "displayName": "Amazon",
+            "displayDescription": "Official Amazon Store",
+            "socials": [{
+                    "name": "twitter",
+                    "url": "https://twitter.com/amazon"
+                }, {
+                    "name": "web",
+                    "url": "https://amazon.com"
+                }
+            ],
+            "rating": 3.8
+        }, {
+            "id": "FFdwdYrsnm7l",
+            "img": "https://m.media-amazon.com/images/M/MV5BNDVkYjU0MzctMWRmZi00NTkxLTgwZWEtOWVhYjZlYjllYmU4XkEyXkFqcGdeQXVyNTA4NzY1MzY@._V1_.jpg",
+            "displayName": "Friends Official",
+            "displayDescription": "Your F.R.I.E.N.D.S store",
+            "socials": [{
+                    "name": "web",
+                    "url": "https://www.warnerbros.com/tv/friends"
+                }, {
+                    "name": "instagram",
+                    "url": "https://www.instagram.com/friends/"
+                }
+            ],
+            "rating": 5
+        }, {
+            "id": "WI1zsKHifGGy",
+            "img": "https://images.indianexpress.com/2017/06/tom-cruise-759.jpg?w=389",
+            "displayName": "Tom Cruise Official",
+            "displayDescription": "I am THE CRUISE, not the Cruz...",
+            "socials": [{
+                    "name": "twitter",
+                    "url": "https://twitter.com/tomcruise"
+                }, {
+                    "name": "instagram",
+                    "url": "https://www.instagram.com/tomcruise"
+                }, {
+                    "name": "facebook",
+                    "url": "https://www.facebook.com/officialtomcruise"
+                }
+            ],
+            "rating": 2
+        }, {
+            "id": "dCdFiBvQ5YUb",
+            "img": "https://cdn.mos.cms.futurecdn.net/5StAbRHLA4ZdyzQZVivm2c-1200-80.jpg.webp",
+            "displayName": "Walmart",
+            "displayDescription": "Save money. Live better.",
+            "socials": [{
+                    "name": "twitter",
+                    "url": "https://twitter.com/Walmart"
+                }, {
+                    "name": "web",
+                    "url": "https://walmart.com"
+                }
+            ],
+            "rating": 2
+        }
+    ],
+    "products": [{
+            "storeId": "TvGFgAJ6qzf7",
+            "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Compactcassette.jpg/1200px-Compactcassette.jpg",
+            "images": [
+                "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Compactcassette.jpg/1200px-Compactcassette.jpg"
+            ],
+            "displayName": "A cassette tape",
+            "displayDescription": "Find a walkman and do aerobics to this",
+            "inventory": 25,
+            "price": 8,
+            "rating": 2,
+            "redemptionType": 2,
+            "status": 0
+        }, {
+            "storeId": "WI1zsKHifGGy",
+            "img": "https://ae01.alicdn.com/kf/H397b8da9ba03499594aedaa380e1bbe87.jpg",
+            "images": [
+                "https://ae01.alicdn.com/kf/H397b8da9ba03499594aedaa380e1bbe87.jpg",
+                "https://ae01.alicdn.com/kf/H14afc8d1acaf481fbc8089cdb6ed2564I/1-6-Scale-Tom-Cruise-Head-Sculpt-for-12inch-Action-Figure-Body-Doll-Accessories-Collectible.jpg_Q90.jpg_.webp"
+            ],
+            "displayName": "My Head Sculpture",
+            "displayDescription": "Look at me everywhere you go",
+            "inventory": 500,
+            "price": 2500,
+            "rating": 2,
+            "redemptionType": 2,
+            "status": 0
+        }, {
+            "storeId": "m1fPQuKFCUM4",
+            "img": "https://i.etsystatic.com/25894060/r/il/749abc/3333286358/il_794xN.3333286358_o0jb.jpg",
+            "images": [
+                "https://i.etsystatic.com/25894060/r/il/749abc/3333286358/il_794xN.3333286358_o0jb.jpg",
+                "https://i.etsystatic.com/25894060/r/il/0ac98f/3380964243/il_794xN.3380964243_p07y.jpg"
+            ],
+            "displayName": "Solana Baseball Cap",
+            "displayDescription": "SOL|Cryptocurrency HAT|Investor Gift - Adult Unisex Size",
+            "inventory": 1000,
+            "price": 25,
+            "rating": 5,
+            "redemptionType": 2,
+            "status": 0
+        }, {
+            "img": "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
+            "images": [
+                "https://www.liveabout.com/thmb/x-CXuH3y_cVVUTonmcWcgLomtXI=/700x700/filters:no_upscale():max_bytes(150000):strip_icc()/katy-perry-i-kissed-a-girl-57bb6a105f9b58cdfd3bb8ff.jpg",
+                "https://c-fa.cdn.smule.com/rs-s41/arr/7a/9f/68d4e3f8-7c95-4ccf-9200-e63041a6c43f_1024.jpg",
+                "https://is2-ssl.mzstatic.com/image/thumb/Music4/v4/2e/55/7f/2e557f05-4b1c-c1f6-e044-28044b71fa76/05099922876454.jpg/1200x1200bf-60.jpg"
+            ],
+            "displayName": "Katie Perry - I Kissed A Girl",
+            "displayDescription": "Purchase song from official Katy Perry Store",
+            "inventory": 2000000,
+            "price": 1,
+            "rating": 3,
+            "redemptionType": 1,
+            "status": 0
+        }, {
+            "img": "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
+            "images": [
+                "https://www.producemarketguide.com/sites/default/files/Commodities.tar/Commodities/carrots_commodity-page.png",
+                "https://medcitynews.com/wp-content/uploads/2017/11/GettyImages-166106089-600x464.jpg",
+                "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQNolczTgLzXCGrVN3vDOCA-NDUeHVCJKQCjA&usqp=CAU"
+            ],
+            "displayName": "A Carrot",
+            "displayDescription": "Buy this carrot!",
+            "inventory": 150,
+            "price": 20,
+            "rating": 5,
+            "redemptionType": 2,
+            "status": 0
+        }, {
+            "img": "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
+            "images": [
+                "https://res.cloudinary.com/bizzaboprod/image/upload/c_crop,g_custom,f_auto/v1633703800/fpxdwrdnd6wan7opc15f.png",
+                "https://miro.medium.com/max/1400/1*mT-FFEblDmNQegY4He_3YA.jpeg",
+                "https://solana.blog/wp-content/uploads/sites/8/2021/09/Screen-Shot-2021-09-21-at-11.02.23-am.png",
+                "https://pbs.twimg.com/media/FZLx_J0WIAIE0jZ?format=jpg&name=4096x4096",
+                "https://i.ytimg.com/vi/scorFcEXZD8/maxresdefault.jpg"
+            ],
+            "displayName": "Solana Breakpoint 2022 Ticket",
+            "displayDescription": "This ticket is good for entry at Solana Breakpoint 2022!",
+            "inventory": 10000,
+            "price": 1000,
+            "redemptionType": 2,
+            "status": 0
+        }, {
+            "storeId": "dCdFiBvQ5YUb",
+            "img": "https://i5.walmartimages.com/asr/88b8c48b-3ea7-4e4e-b8f3-997171733faf.c0b2ecdfa3441e9e74d0659c1e1d65f6.jpeg?odnHeight=612&odnWidth=612&odnBg=FFFFFF",
+            "images": [
+                "https://i5.walmartimages.com/asr/88b8c48b-3ea7-4e4e-b8f3-997171733faf.c0b2ecdfa3441e9e74d0659c1e1d65f6.jpeg?odnHeight=612&odnWidth=612&odnBg=FFFFFF",
+                "https://www.kroger.com/product/images/large/right/0003760011544",
+                "https://www.spam.com/wp-content/uploads/2019/08/nutrition-label-less-sodium.jpg"
+            ],
+            "displayName": "SPAM Classic 25% Less Sodium - 12 Oz",
+            "displayDescription": "The real stuff just tastes better...",
+            "inventory": 250,
+            "price": 4,
+            "rating": 4,
+            "redemptionType": 2,
+            "status": 0
+        }
+    ]
 }
