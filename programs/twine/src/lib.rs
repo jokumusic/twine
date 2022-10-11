@@ -5,7 +5,7 @@ use anchor_spl::{
     token::{Token,TokenAccount,Mint},
 };
 
-declare_id!("8JPgG4xdqYGxT8VYFnMqsvxfWTxNCT7AeX7RdTisq3cG");
+declare_id!("GFyEm6g84oRmd156hPrJWsbWcsZaM4mhFf4654QgN5ae");
 
 pub mod payment_token {
     use super::*;

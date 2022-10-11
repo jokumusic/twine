@@ -8,10 +8,12 @@ import { BN } from "bn.js";
 import {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAccount, getOrCreateAssociatedTokenAccount, Account} from "@solana/spl-token";
 import * as spl_token from "@solana/spl-token";
 import * as data from './data.json';
-import * as brotli from 'brotli';
 import * as tokenFaucetIdl from "./tokenfaucet.json";
 import type { Tokenfaucet }  from "./tokenfaucet.ts";
 import TransactionFactory from "@project-serum/anchor/dist/cjs/program/namespace/transaction";
+import * as brotli from 'brotli';
+import * as fflate from 'fflate';
+
 
 const RUN_STANDARD_TESTS = true;
 const LOAD_MOCK_DATA = false;
@@ -40,17 +42,44 @@ const toBytes = (data, type) =>
                 : `Not Sure about type - ${type}`
 
 function compress(o){
-  const compressedData = brotli.compress(Buffer.from(JSON.stringify(o)), {
-    mode: 1, // 0 = generic, 1 = text, 2 = font (WOFF2)
-    quality: 10, // 0 - 11
-    lgwin: 22, // window size
-  });
-  return Buffer.from(compressedData);
+  const json = JSON.stringify(o);
+  const jsonBuffer = Buffer.from(json);
+
+  /*console.log(`json: ${json.length}, jsonBuffer: ${jsonBuffer.length}`);
+
+  const fflateStart = new Date().getTime();
+  const fflateCompressed = fflate.compressSync(jsonBuffer, { level: 9, mem: 8 })
+  const fflateElapsed = new Date().getTime() - fflateStart;
+
+  const zlibStart = new Date().getTime();
+  const zlibCompressed = fflate.zlibSync(jsonBuffer, { level: 9 });
+  const zlibElapsed = new Date().getTime() - zlibStart;
+*/
+
+/*
+const brotStart = new Date().getTime();
+const compressed = brotli.compress(jsonBuffer, {
+  mode: 1, // 0 = generic, 1 = text, 2 = font (WOFF2)
+  quality: 11, // 0 - 11
+  lgwin: 22, // window size
+});
+const brotElapsed = new Date().getTime() - brotStart;
+*/
+
+/*
+  console.log(`
+   brotli: ${compressed.length}, time: ${brotElapsed}.
+   fflate: ${fflateCompressed.length}, time: ${fflateElapsed}
+   zlib: ${zlibCompressed.length}, time: ${zlibElapsed}`);
+*/
+  const compressed = fflate.zlibSync(jsonBuffer, { level: 9 });
+  return Buffer.from(compressed);
 }
 
-function decompress(s) {
-  const decompressedData = brotli.decompress(s);
-  const json = Buffer.from(decompressedData).toString();
+function decompress(compressed) {
+  //const decompressedData = brotli.decompress(s);
+  const decompressed = fflate.unzlibSync(compressed);
+  const json = Buffer.from(decompressed).toString();
   return JSON.parse(json);
 }
 
